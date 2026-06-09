@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Header from "./components/Header";
+import Sidebar from "./components/Sidebar";
 
 export const metadata: Metadata = {
   title: "Tennis Analytics — Player Stats & Rankings",
@@ -22,12 +22,14 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
-        <Header />
-        <main style={{ flex: 1 }}>{children}</main>
-        <footer className="footer">
-          © 2025 Tennis Analytics · Data updated daily
-        </footer>
+      <body style={{ display: "flex", minHeight: "100dvh" }}>
+        <Sidebar />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          <main style={{ flex: 1 }}>{children}</main>
+          <footer className="footer">
+            © 2025 Tennis Analytics · Data updated daily
+          </footer>
+        </div>
       </body>
     </html>
   );
