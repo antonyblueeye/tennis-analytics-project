@@ -18,6 +18,32 @@ def get_players_count():
         raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"count": row["count"] if row else 0}
 
+@router.get("/count-matches")
+def get_matches_count():
+    """Получить общее количество игроков в базе данных."""
+    sql = "SELECT COUNT(*) as count FROM atp_matches"
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql)
+                row = cur.fetchone()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+    return {"count": row["count"] if row else 0}
+
+@router.get("/count-tourneys")
+def get_tourneys_count():
+    """Получить общее количество игроков в базе данных."""
+    sql = "select count(distinct split_part(tourney_id, '-', 2)) from atp_matches am"
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql)
+                row = cur.fetchone()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+    return {"count": row["count"] if row else 0}
+
 
 @router.get("/search")
 def search_players(q: str = Query(..., min_length=1, description="Имя или фамилия игрока")):
