@@ -66,6 +66,28 @@ def search_players(q: str = Query(..., min_length=1, description="Имя или 
 
     return {"results": [dict(r) for r in rows]}
 
+@router.get("/{player_id}")
+def get_player(player_id: int):
+    """Получить данные одного игрока по ID."""
+    sql = """
+        SELECT player_id, name_first, name_last, hand, height, ioc
+        FROM atp_players
+        WHERE player_id = %s
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # player_id в БД хранится как VARCHAR (импорт из CSV)
+                cur.execute(sql, (str(player_id),))
+                row = cur.fetchone()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Игрок не найден")
+
+    return dict(row)
+
 @router.get("/{player_id}/latest-ranking")
 def get_latest_ranking(player_id: int):
     """
