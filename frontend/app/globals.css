@@ -516,6 +516,136 @@ body {
 }
 
 /* ============================================================
+   RANKINGS TABLE
+   ============================================================ */
+.rankings-section {
+  margin-top: 8px;
+}
+
+.rankings-table-wrap {
+  overflow-x: auto;
+}
+
+.rankings-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+}
+
+.rankings-table thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.55px;
+  padding: 0 14px 6px;
+  white-space: nowrap;
+}
+
+.rankings-table thead th.col-rank {
+  width: 72px;
+  text-align: center;
+}
+
+.rankings-table thead th.col-points {
+  text-align: right;
+}
+
+.rankings-table tbody tr {
+  transition: transform var(--transition-fast);
+}
+
+.rankings-table tbody tr:hover {
+  transform: translateX(2px);
+}
+
+.rankings-table tbody td {
+  padding: 13px 14px;
+  vertical-align: middle;
+  background: var(--surface-muted);
+  transition: background var(--transition-fast);
+}
+
+.rankings-table tbody tr:hover td {
+  background: var(--green-50);
+}
+
+.rankings-table tbody td:first-child {
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  text-align: center;
+}
+
+.rankings-table tbody td:last-child {
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  font-weight: 700;
+  font-size: 14px;
+  background: var(--gray-100);
+  color: var(--text-secondary);
+}
+
+.rank-badge.top-1 {
+  background: var(--grad-primary);
+  color: #fff;
+  box-shadow: var(--shadow-green);
+}
+
+.rank-badge.top-2 {
+  background: var(--green-200);
+  color: var(--green-800);
+}
+
+.rank-badge.top-3 {
+  background: var(--green-100);
+  color: var(--green-700);
+}
+
+.rankings-player-cell {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 200px;
+}
+
+.rankings-player-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.rankings-points {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--green-600);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rankings-date {
+  color: var(--text-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .rankings-table thead th.col-date,
+  .rankings-table tbody td.col-date {
+    display: none;
+  }
+}
+
+/* ============================================================
    STATES
    ============================================================ */
 .loading-wrap {

@@ -39,3 +39,87 @@ def search_players(q: str = Query(..., min_length=1, description="Имя или 
         raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
     return {"results": [dict(r) for r in rows]}
+
+@router.get("/{player_id}/latest-ranking")
+def get_latest_ranking(player_id: int):
+    """
+    Возвращает последний рейтинг игрока + имя/фамилию
+    """
+
+    sql = """
+        SELECT
+            p.player_id,
+            p.name_first,
+            p.name_last,
+
+            ROUND(r.rank::numeric)::int AS rank,
+            ROUND(r.points::numeric)::int AS points,
+
+            to_date(ROUND(r.ranking_date::numeric)::text, 'YYYYMMDD') AS ranking_date
+
+        FROM atp_rankings r
+        JOIN atp_players p
+            ON p.player_id::text = ROUND(r.player::numeric)::text
+
+        WHERE ROUND(r.player::numeric)::int = %s
+
+        ORDER BY r.ranking_date DESC
+        LIMIT 1;
+    """
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (player_id,))
+                row = cur.fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Игрок не найден")
+
+        return dict(row)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+
+@router.get("/rankings/top")
+def get_top_rankings(limit: int = 100):
+    """
+    Топ игроков по актуальному рейтингу (последняя доступная дата)
+    """
+
+    sql = """
+        WITH latest_date AS (
+            SELECT MAX(ranking_date) AS max_date
+            FROM atp_rankings
+        )
+        SELECT
+            p.player_id,
+            p.name_first,
+            p.name_last,
+
+            ROUND(r.rank::numeric)::int AS rank,
+            ROUND(r.points::numeric)::int AS points,
+
+            to_date(ROUND(r.ranking_date::numeric)::text, 'YYYYMMDD') AS ranking_date
+
+        FROM atp_rankings r
+        JOIN atp_players p
+            ON p.player_id::text = ROUND(r.player::numeric)::text
+
+        JOIN latest_date ld
+            ON r.ranking_date = ld.max_date
+
+        ORDER BY rank ASC
+        LIMIT %s;
+    """
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (limit,))
+                rows = cur.fetchall()
+
+        return {"results": [dict(r) for r in rows]}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

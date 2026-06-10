@@ -23,24 +23,27 @@ const data = [
 
 export default function LineChartDemo() {
   return (
-    <div style={{ width: "100%", height: 400, background: "White", padding: "30px", borderRadius: "30px"}}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          
-          <XAxis dataKey="name" />
-          <YAxis />
-
-          <Tooltip />
-
-          <Line
-            type="monotone"
-            dataKey="value"
-            stroke="#82ca9d"
-            strokeWidth={2}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+    <div
+      style={{
+        width: "100%",
+        height: 400,
+        background: "white",
+        borderRadius: 30,
+        padding: 30,
+        boxSizing: "border-box",
+      }}
+    >
+      <div style={{ width: "100%", height: "100%" }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
+            <Line type="monotone" dataKey="value" stroke="#82ca9d" strokeWidth={2} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
