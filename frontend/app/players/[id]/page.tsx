@@ -8,6 +8,7 @@ import countries from 'i18n-iso-countries';
 import enLocale from 'i18n-iso-countries/langs/en.json';
 import { iocToAlpha2, iocToName } from '../../lib/ioc';
 import { getWikiImage } from '../../lib/wiki';
+import RankingHistoryChart from '../../components/RankingHistoryChart';
 
 countries.registerLocale(enLocale);
 
@@ -18,6 +19,12 @@ interface Player {
   hand: string | null;
   height: number | string | null;
   ioc: string | null;
+}
+
+interface RankingHistory {
+  ranking_date: string;
+  rank: number;
+  points: number;
 }
 
 const handLabel: Record<string, string> = {
@@ -46,6 +53,7 @@ export default function PlayerProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [rankingHistory, setRankingHistory] = useState<RankingHistory[]>([]);
 
   useEffect(() => {
     if (!playerId || Number.isNaN(playerId)) {
@@ -60,6 +68,12 @@ export default function PlayerProfilePage() {
         if (!res.ok) throw new Error('Player not found');
         const data: Player = await res.json();
         setPlayer(data);
+
+        const rankingRes = await fetch(`http://127.0.0.1:8000/api/players/${playerId}/rankings-history`);
+        if (rankingRes.ok) {
+          const rankingData = await rankingRes.json();
+          setRankingHistory(rankingData.results || []);
+        }
 
         const fullName = `${data.name_first} ${data.name_last}`;
         const img = await getWikiImage(fullName);
@@ -160,7 +174,12 @@ export default function PlayerProfilePage() {
           </div>
         </div>
 
-        <div className="player-profile-analytics" />
+        <div className="player-profile-analytics">
+          {rankingHistory.length > 0 && (
+            <RankingHistoryChart data={rankingHistory} />
+          )}
+        </div>
+
       </article>
     </div>
   );

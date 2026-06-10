@@ -171,3 +171,44 @@ def get_top_rankings(limit: int = 100):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{player_id}/rankings-history")
+def get_rankings_history(player_id: int):
+    """
+    История рейтинга игрока.
+    Сортировка: от самой новой даты к самой старой.
+    """
+
+    sql = """
+        SELECT
+            to_date(
+                ROUND(ranking_date::numeric)::text,
+                'YYYYMMDD'
+            ) AS ranking_date,
+
+            ROUND(rank::numeric)::int AS rank,
+            ROUND(points::numeric)::int AS points
+
+        FROM atp_rankings
+
+        WHERE ROUND(player::numeric)::int = %s
+
+        ORDER BY ranking_date DESC
+    """
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (player_id,))
+                rows = cur.fetchall()
+
+        return {
+            "player_id": player_id,
+            "results": [dict(r) for r in rows]
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка базы данных: {e}"
+        )
