@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import LineChartDemo from './components/LineChartDemo';
 
 export default function DashboardPage() {
   const [totalPlayers, setTotalPlayers] = useState<number | null>(null);
@@ -28,9 +29,8 @@ export default function DashboardPage() {
 
   return (
     <div className="page-content">
-      {/* Hero Header */}
-      <section className="hero" style={{ padding: '48px 0 32px 0' }}>
-        <div className="hero-tag">📊 Overview</div>
+      <section className="hero">
+        <div className="hero-tag">Overview</div>
         <h1 className="hero-title">
           Tennis <span>Dashboard</span>
         </h1>
@@ -39,63 +39,46 @@ export default function DashboardPage() {
         </p>
       </section>
 
-      {/* Stats Cards Grid */}
-      <div 
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: '24px',
-          marginTop: '32px'
-        }}
-      >
-        {/* Total Players Card */}
-        <div className="stat-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '160px' }}>
-          <div className="stat-label" style={{ marginBottom: '8px' }}>Total Registered Players</div>
-          {loading ? (
-            <div className="spinner" style={{ width: '24px', height: '24px', borderWidth: '2px' }} />
-          ) : error ? (
-            <div className="stat-value" style={{ color: '#ef4444' }}>Error</div>
-          ) : (
-            <div className="stat-value">
-              {totalPlayers?.toLocaleString() || '0'}
-            </div>
-          )}
-          <Link 
-            href="/players" 
-            style={{ 
-              marginTop: '16px', 
-              fontSize: '13px', 
-              color: 'var(--green-600)', 
-              textDecoration: 'none', 
-              fontWeight: '600'
-            }}
-          >
-            Search database →
-          </Link>
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-card-inner">
+            <div className="stat-label">Total Registered Players</div>
+            {loading ? (
+              <div className="spinner" style={{ width: '24px', height: '24px', borderWidth: '2px' }} />
+            ) : error ? (
+              <div className="stat-value" style={{ color: '#dc4c4c', fontSize: '24px' }}>Error</div>
+            ) : (
+              <div className="stat-value accent">
+                {totalPlayers?.toLocaleString() || '0'}
+              </div>
+            )}
+            <Link href="/players" className="stat-link">
+              Search database →
+            </Link>
+          </div>
         </div>
 
-        {/* Matches Card Placeholder */}
-        <div className="stat-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '160px', opacity: 0.8 }}>
-          <div className="stat-label" style={{ marginBottom: '8px' }}>Matches Logged</div>
-          <div className="stat-value" style={{ color: 'var(--text-muted)' }}>
-            —
+        <div className="stat-card dimmed">
+          <div className="stat-card-inner">
+            <div className="stat-label">Matches Logged</div>
+            <div className="stat-value muted">—</div>
+            <span className="stat-badge">Coming Soon</span>
           </div>
-          <span style={{ marginTop: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            🎾 Coming Soon
-          </span>
         </div>
 
-        {/* Tournaments Card Placeholder */}
-        <div className="stat-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '160px', opacity: 0.8 }}>
-          <div className="stat-label" style={{ marginBottom: '8px' }}>Tournaments tracked</div>
-          <div className="stat-value" style={{ color: 'var(--text-muted)' }}>
-            —
+        <div className="stat-card dimmed">
+          <div className="stat-card-inner">
+            <div className="stat-label">Tournaments Tracked</div>
+            <div className="stat-value muted">—</div>
+            <span className="stat-badge">Coming Soon</span>
           </div>
-          <span style={{ marginTop: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            🏆 Coming Soon
-          </span>
         </div>
       </div>
+
+      <div style={{ marginTop: "40px" }}>
+        <LineChartDemo />
+      </div>      
+      
     </div>
   );
 }

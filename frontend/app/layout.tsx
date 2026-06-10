@@ -22,10 +22,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body style={{ display: "flex", minHeight: "100dvh" }}>
+      <body>
         <Sidebar />
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-          <main style={{ flex: 1 }}>{children}</main>
+        <div className="main-area">
+          <main>{children}</main>
           <footer className="footer">
             © 2025 Tennis Analytics · Data updated daily
           </footer>
