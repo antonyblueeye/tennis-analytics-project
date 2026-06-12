@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getWikiImage } from '../lib/wiki';
+import { getPlayerImage } from '../lib/wiki';
 
 type RankingPlayer = {
-  player_id: number;
+  player_id: number | string;
   rank: number;
   name_first: string;
   name_last: string;
   points: number;
   ranking_date: string;
+  wikidata_id: string | null;
 };
 
 function getInitials(first: string, last: string) {
@@ -36,7 +37,7 @@ export default function RankingsPage() {
   const [data, setData] = useState<RankingPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [images, setImages] = useState<Record<number, string>>({});
+  const [images, setImages] = useState<Record<string, string>>({});
 
   useEffect(() => {
     async function fetchRankings() {
@@ -49,9 +50,9 @@ export default function RankingsPage() {
 
         results.forEach(async (player) => {
           const fullName = `${player.name_first} ${player.name_last}`;
-          const imgUrl = await getWikiImage(fullName);
+          const imgUrl = await getPlayerImage(player.wikidata_id, fullName);
           if (imgUrl) {
-            setImages((prev) => ({ ...prev, [player.player_id]: imgUrl }));
+            setImages((prev) => ({ ...prev, [String(player.player_id)]: imgUrl }));
           }
         });
       } catch (err) {
@@ -119,7 +120,7 @@ export default function RankingsPage() {
               <tbody>
                 {data.map((p) => {
                   const fullName = `${p.name_first} ${p.name_last}`;
-                  const imageUrl = images[p.player_id];
+                  const imageUrl = images[String(p.player_id)];
 
                   return (
                     <tr key={p.player_id}>

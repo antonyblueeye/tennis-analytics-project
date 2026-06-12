@@ -6,17 +6,18 @@ import ReactCountryFlag from 'react-country-flag';
 import countries from 'i18n-iso-countries';
 import enLocale from 'i18n-iso-countries/langs/en.json';
 import { iocToAlpha2, iocToName } from '../lib/ioc';
-import { getWikiImage } from '../lib/wiki';
+import { getPlayerImage } from '../lib/wiki';
 
 countries.registerLocale(enLocale);
 
 interface Player {
-  player_id: number;
+  player_id: number | string;
   name_first: string;
   name_last: string;
   hand: string | null;
   height: number | null;
   ioc: string | null;
+  wikidata_id: string | null;
 }
 
 function getInitials(first: string | null, last: string | null) {
@@ -34,7 +35,7 @@ export default function PlayersPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [images, setImages] = useState<Record<number, string>>({});
+  const [images, setImages] = useState<Record<string, string>>({});
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -48,9 +49,9 @@ export default function PlayersPage() {
 
       results.forEach(async (player) => {
         const fullName = `${player.name_first} ${player.name_last}`;
-        const imgUrl = await getWikiImage(fullName);
+        const imgUrl = await getPlayerImage(player.wikidata_id, fullName);
         if (imgUrl) {
-          setImages((prev) => ({ ...prev, [player.player_id]: imgUrl }));
+          setImages((prev) => ({ ...prev, [String(player.player_id)]: imgUrl }));
         }
       });
     } catch (err) {
@@ -122,7 +123,7 @@ export default function PlayersPage() {
                 {players.map((player) => {
                   const countryName = iocToName(player.ioc, countries.getName.bind(countries));
                   const countryCode = iocToAlpha2(player.ioc);
-                  const imageUrl = images[player.player_id];
+                  const imageUrl = images[String(player.player_id)];
 
                   return (
                     <li key={player.player_id}>

@@ -50,7 +50,7 @@ def search_players(q: str = Query(..., min_length=1, description="Имя или 
     """Поиск игроков по имени или фамилии (частичное совпадение, без учёта регистра)."""
     like = f"%{q}%"
     sql = """
-        SELECT player_id, name_first, name_last, hand, height, ioc
+        SELECT player_id, name_first, name_last, hand, height, ioc, dob, wikidata_id
         FROM atp_players
         WHERE name_first ILIKE %s OR name_last ILIKE %s
         ORDER BY name_last, name_first
@@ -70,7 +70,7 @@ def search_players(q: str = Query(..., min_length=1, description="Имя или 
 def get_player(player_id: int):
     """Получить данные одного игрока по ID."""
     sql = """
-        SELECT player_id, name_first, name_last, hand, height, ioc
+        SELECT player_id, name_first, name_last, hand, height, ioc, dob, wikidata_id
         FROM atp_players
         WHERE player_id = %s
     """
@@ -144,6 +144,7 @@ def get_top_rankings(limit: int = 100):
             p.player_id,
             p.name_first,
             p.name_last,
+            p.wikidata_id,
 
             ROUND(r.rank::numeric)::int AS rank,
             ROUND(r.points::numeric)::int AS points,

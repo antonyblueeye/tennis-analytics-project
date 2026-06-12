@@ -1,41 +1,86 @@
 /**
- * Fetches the main image URL for a Wikipedia page by its title.
- * Returns null if no image is found or if the request fails.
+ * Normalizes wikidata_id from DB (e.g. "Q712208", "712208", "712208.0") → "Q712208"
  */
-export async function getWikiImage(playerName: string): Promise<string | null> {
-  // 1. Сначала пробуем строго теннисную страницу, например "Andrei Medvedev (tennis)"
-  const tennisTitle = `${playerName} (tennis)`;
-  let imageUrl = await getDirectWikiImage(tennisTitle);
-  
-  if (imageUrl) {
-    return imageUrl;
-  }
-  
-  // 2. Если не нашлось, пробуем прямую страницу "Andrei Medvedev"
-  return await getDirectWikiImage(playerName);
+export function normalizeWikidataId(id: string | number | null | undefined): string | null {
+  if (id == null || id === '') return null;
+  const raw = String(id).trim().replace(/\.0+$/, '');
+  if (!raw) return null;
+  if (raw.startsWith('Q')) return raw;
+  if (/^\d+$/.test(raw)) return `Q${raw}`;
+  return null;
 }
 
 /**
- * Directly fetches the main image for a specific Wikipedia page title.
+ * Fetches image from Wikidata entity (property P18) via Commons.
+ * @see https://www.wikidata.org/wiki/Q712208
  */
+export async function getWikidataImage(
+  wikidataId: string | number | null | undefined
+): Promise<string | null> {
+  const id = normalizeWikidataId(wikidataId);
+  if (!id) return null;
+
+  const url =
+    `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(id)}` +
+    `&props=claims&format=json&origin=*`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const claims = data.entities?.[id]?.claims?.P18;
+    if (!claims?.length) return null;
+
+    const filename = claims[0]?.mainsnak?.datavalue?.value;
+    if (typeof filename !== 'string' || !filename) return null;
+
+    return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename)}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Wikidata first; Wikipedia by name as fallback when wikidata_id is missing. */
+export async function getPlayerImage(
+  wikidataId: string | number | null | undefined,
+  playerName?: string
+): Promise<string | null> {
+  const fromWikidata = await getWikidataImage(wikidataId);
+  if (fromWikidata) return fromWikidata;
+  if (playerName) return getWikiImage(playerName);
+  return null;
+}
+
+/**
+ * @deprecated Use getWikidataImage / getPlayerImage instead.
+ */
+export async function getWikiImage(playerName: string): Promise<string | null> {
+  const tennisTitle = `${playerName} (tennis)`;
+  let imageUrl = await getDirectWikiImage(tennisTitle);
+  if (imageUrl) return imageUrl;
+  return getDirectWikiImage(playerName);
+}
+
 async function getDirectWikiImage(pageTitle: string): Promise<string | null> {
   const cleanTitle = pageTitle.replace(/\s+/g, '_');
-  const url = `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&piprop=original&titles=${encodeURIComponent(cleanTitle)}&origin=*`;
+  const url =
+    `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages` +
+    `&piprop=original&titles=${encodeURIComponent(cleanTitle)}&origin=*`;
 
   try {
     const response = await fetch(url);
     if (!response.ok) return null;
     const data = await response.json();
-    
+
     const pages = data.query?.pages;
     if (!pages) return null;
-    
+
     const pageId = Object.keys(pages)[0];
-    if (pageId === '-1') return null; // Page not found
-    
-    const original = pages[pageId]?.original;
-    return original ? original.source : null;
-  } catch (error) {
+    if (pageId === '-1') return null;
+
+    return pages[pageId]?.original?.source ?? null;
+  } catch {
     return null;
   }
 }

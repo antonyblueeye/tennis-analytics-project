@@ -8,6 +8,8 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  ReferenceDot,
+  Label,
 } from 'recharts';
 
 interface RankingPoint {
@@ -21,6 +23,9 @@ interface Props {
 
 export default function RankingHistoryChart({ data }: Props) {
   const chartData = [...data].reverse();
+  const bestPoint = chartData.reduce((best, point) => {
+    return point.rank < best.rank ? point : best;
+  }, chartData[0]);
 
   return (
     <div className="analytics-card">
@@ -36,7 +41,6 @@ export default function RankingHistoryChart({ data }: Props) {
                bottom: 20,
              }}
             >
-          <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
 
           <XAxis
             dataKey="ranking_date"
@@ -64,25 +68,39 @@ export default function RankingHistoryChart({ data }: Props) {
             }}
             />
 
+          <CartesianGrid
+            stroke="#B2B2B2"
+            strokeWidth={1}
+            strokeOpacity={0.4}
+          />
+
           <Line
             type="monotone"
             dataKey="rank"
             stroke="#10b981"
-            strokeWidth={2}
+            strokeWidth={2  }
+            strokeLinecap="round"
+            strokeLinejoin="round"
             dot={false}
-            filter="url(#glow)"
           />
 
+        {/* 🏆 BEST RANK */}
+        <ReferenceDot
+          x={bestPoint.ranking_date}
+          y={bestPoint.rank}
+          r={5}
+          fill="#10b981"
+          stroke="#0f172a"
+          strokeWidth={2}
+        />
 
-        <defs>
-        <filter id="glow">
-            <feGaussianBlur stdDeviation="4" result="coloredBlur" />
-            <feMerge>
-            <feMergeNode in="coloredBlur" />
-            <feMergeNode in="SourceGraphic" />
-            </feMerge>
-        </filter>
-        </defs>
+        <Label
+          value={`Best Ranking: #${bestPoint.rank} on ${bestPoint.ranking_date}`}
+          position="top"
+          fill="#10b981"
+          fontSize={12}
+          fontWeight={600}
+        />
 
         </LineChart>
       </ResponsiveContainer>

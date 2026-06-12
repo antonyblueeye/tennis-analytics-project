@@ -7,7 +7,8 @@ import ReactCountryFlag from 'react-country-flag';
 import countries from 'i18n-iso-countries';
 import enLocale from 'i18n-iso-countries/langs/en.json';
 import { iocToAlpha2, iocToName } from '../../lib/ioc';
-import { getWikiImage } from '../../lib/wiki';
+import { getPlayerImage } from '../../lib/wiki';
+import { formatDobWithAge } from '../../lib/player';
 import RankingHistoryChart from '../../components/RankingHistoryChart';
 
 countries.registerLocale(enLocale);
@@ -19,6 +20,8 @@ interface Player {
   hand: string | null;
   height: number | string | null;
   ioc: string | null;
+  dob: string | number | null;
+  wikidata_id: string | null;
 }
 
 interface RankingHistory {
@@ -76,7 +79,7 @@ export default function PlayerProfilePage() {
         }
 
         const fullName = `${data.name_first} ${data.name_last}`;
-        const img = await getWikiImage(fullName);
+        const img = await getPlayerImage(data.wikidata_id, fullName);
         if (img) setImageUrl(img);
       } catch (err) {
         console.error(err);
@@ -139,6 +142,14 @@ export default function PlayerProfilePage() {
             <p className="player-profile-id">ATP ID · {player.player_id}</p>
 
             <div className="player-profile-fields">
+              <div className="profile-field">
+                <span className="profile-field-icon">🎂</span>
+                <span className="profile-field-label">Date of birth</span>
+                <span className="profile-field-value">
+                  {formatDobWithAge(player.dob)}
+                </span>
+              </div>
+
               <div className="profile-field">
                 <span className="profile-field-icon">🖐</span>
                 <span className="profile-field-label">Playing hand</span>
