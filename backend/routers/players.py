@@ -213,3 +213,77 @@ def get_rankings_history(player_id: int):
             status_code=500,
             detail=f"Ошибка базы данных: {e}"
         )
+
+
+@router.get("/{player_id}/grand-slams")
+def get_grand_slam_results(player_id: int):
+    """
+    Лучший результат игрока на каждом шлеме по годам.
+    tourney_id: YYYY-580 (AO), YYYY-520 (RG), YYYY-540 (W), YYYY-560 (US)
+    """
+
+    sql = """
+        WITH slam_matches AS (
+            SELECT
+                SPLIT_PART(tourney_id, '-', 1)::int AS year,
+                CASE SPLIT_PART(tourney_id, '-', 2)
+                    WHEN '580' THEN 'ao'
+                    WHEN '520' THEN 'rg'
+                    WHEN '540' THEN 'w'
+                    WHEN '560' THEN 'us'
+                END AS slam,
+                round,
+                won_match,
+                CASE
+                    WHEN round = 'R128' THEN 1
+                    WHEN round = 'R64'  THEN 2
+                    WHEN round = 'R32'  THEN 3
+                    WHEN round = 'R16'  THEN 4
+                    WHEN round = 'R48'  THEN 4
+                    WHEN round = 'R24'  THEN 4
+                    WHEN round = 'QF'   THEN 5
+                    WHEN round = 'SF'   THEN 6
+                    WHEN round = 'F'    THEN 7
+                    ELSE 0
+                END AS round_rank
+            FROM atp_player_matches
+            WHERE player_id = %s
+              AND SPLIT_PART(tourney_id, '-', 2) IN ('580', '520', '540', '560')
+        ),
+
+        best_rounds AS (
+            SELECT DISTINCT ON (year, slam)
+                year,
+                slam,
+                round,
+                won_match,
+                round_rank
+            FROM slam_matches
+            WHERE slam IS NOT NULL
+            ORDER BY year, slam, round_rank DESC
+        )
+
+        SELECT
+            year,
+            slam,
+            CASE
+                WHEN round = 'F' AND won_match IN ('1', '1.0') THEN 'W'
+                ELSE round
+            END AS result
+        FROM best_rounds
+        ORDER BY year DESC, slam;
+    """
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (str(player_id),))
+                rows = cur.fetchall()
+
+        return {
+            "player_id": player_id,
+            "results": [dict(r) for r in rows]
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
