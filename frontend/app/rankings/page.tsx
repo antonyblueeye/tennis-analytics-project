@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { getPlayerImage } from '../lib/wiki';
 
 type RankingPlayer = {
@@ -34,6 +35,7 @@ function rankBadgeClass(rank: number) {
 }
 
 export default function RankingsPage() {
+  const router = useRouter();
   const [data, setData] = useState<RankingPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -123,7 +125,20 @@ export default function RankingsPage() {
                   const imageUrl = images[String(p.player_id)];
 
                   return (
-                    <tr key={p.player_id}>
+                    <tr
+                      key={p.player_id}
+                      className="rankings-row"
+                      onClick={() => router.push(`/players/${p.player_id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          router.push(`/players/${p.player_id}`);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="link"
+                      aria-label={`View profile of ${fullName}`}
+                    >
                       <td>
                         <span className={rankBadgeClass(p.rank)}>{p.rank}</span>
                       </td>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import ReactCountryFlag from 'react-country-flag';
 import countries from 'i18n-iso-countries';
@@ -20,6 +20,26 @@ interface Player {
   wikidata_id: string | null;
 }
 
+interface TopPlayer {
+  player_id: number | string;
+  name_first: string;
+  name_last: string;
+  wikidata_id: string | null;
+  rank: number;
+  points: number;
+}
+
+const BUBBLE_COUNT = 20;
+
+function shufflePick<T>(arr: T[], n: number): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, n);
+}
+
 function getInitials(first: string | null, last: string | null) {
   const f = first ? first.charAt(0) : '';
   const l = last ? last.charAt(0) : '';
@@ -36,6 +56,37 @@ export default function PlayersPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [images, setImages] = useState<Record<string, string>>({});
+
+  const [featured, setFeatured] = useState<TopPlayer[]>([]);
+  const [featuredLoading, setFeaturedLoading] = useState(true);
+  const [bubbleImages, setBubbleImages] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    async function loadFeatured() {
+      try {
+        const res = await fetch('http://127.0.0.1:8000/api/players/rankings/top?limit=100');
+        if (!res.ok) throw new Error('Failed to fetch top rankings');
+        const data = await res.json();
+        const top: TopPlayer[] = data.results || [];
+        const picked = shufflePick(top, BUBBLE_COUNT);
+        setFeatured(picked);
+
+        picked.forEach(async (player) => {
+          const fullName = `${player.name_first} ${player.name_last}`;
+          const imgUrl = await getPlayerImage(player.wikidata_id, fullName);
+          if (imgUrl) {
+            setBubbleImages((prev) => ({ ...prev, [String(player.player_id)]: imgUrl }));
+          }
+        });
+      } catch (err) {
+        console.error(err);
+        setFeatured([]);
+      } finally {
+        setFeaturedLoading(false);
+      }
+    }
+    loadFeatured();
+  }, []);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -97,6 +148,48 @@ export default function PlayersPage() {
           >
             {loading ? 'Searching…' : 'Search'}
           </button>
+        </div>
+
+        <div className="player-bubbles-section">
+          <p className="player-bubbles-label">Quick picks from the top 100</p>
+          {featuredLoading ? (
+            <div className="player-bubbles player-bubbles-loading">
+              {Array.from({ length: BUBBLE_COUNT }).map((_, i) => (
+                <div key={i} className="player-bubble player-bubble-skeleton" aria-hidden />
+              ))}
+            </div>
+          ) : featured.length > 0 ? (
+            <div className="player-bubbles">
+              {featured.map((player) => {
+                const fullName = `${player.name_first} ${player.name_last}`;
+                const imgUrl = bubbleImages[String(player.player_id)];
+                return (
+                  <Link
+                    key={player.player_id}
+                    href={`/players/${player.player_id}`}
+                    className="player-bubble"
+                    title={`${fullName} · #${player.rank}`}
+                  >
+                    <div className="player-bubble-avatar-wrap">
+                      {imgUrl ? (
+                        <img
+                          src={imgUrl}
+                          alt={fullName}
+                          className="player-bubble-avatar"
+                        />
+                      ) : (
+                        <div className="player-bubble-avatar player-bubble-avatar-fallback">
+                          {getInitials(player.name_first, player.name_last)}
+                        </div>
+                      )}
+                      <span className="player-bubble-rank">#{player.rank}</span>
+                    </div>
+                    <span className="player-bubble-name">{player.name_last}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       </section>
 

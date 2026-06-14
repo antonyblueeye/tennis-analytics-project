@@ -1,8 +1,34 @@
 # backend/routers/players.py
 from fastapi import APIRouter, Query, HTTPException
 from database import get_connection
+from tournament_calendar import (
+    normalize_masters_calendar,
+    resolve_masters_result,
+    resolve_slam_result,
+    RESULT_ABSENT,
+)
+
+from score_utils import player_perspective_score
 
 router = APIRouter(prefix="/api/players", tags=["players"])
+
+SLAM_KEYS = ("ao", "rg", "w", "us")
+SLAM_SUFFIX = {"ao": "580", "rg": "520", "w": "540", "us": "560"}
+
+ROUND_ORDER_SQL = """
+    CASE
+        WHEN round = 'R128' THEN 1
+        WHEN round = 'R64'  THEN 2
+        WHEN round = 'R32'  THEN 3
+        WHEN round = 'R16'  THEN 4
+        WHEN round = 'R48'  THEN 4
+        WHEN round = 'R24'  THEN 4
+        WHEN round = 'QF'   THEN 5
+        WHEN round = 'SF'   THEN 6
+        WHEN round = 'F'    THEN 7
+        ELSE 99
+    END
+"""
 
 
 @router.get("/count")
@@ -282,8 +308,328 @@ def get_grand_slam_results(player_id: int):
 
         return {
             "player_id": player_id,
-            "results": [dict(r) for r in rows]
+            "results": _enrich_grand_slam_results(
+                [dict(r) for r in rows],
+                global_held=_fetch_global_slam_held(),
+            ),
         }
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+
+
+def _fetch_global_slam_held() -> set[tuple[int, str]]:
+    sql = """
+        SELECT DISTINCT
+            SPLIT_PART(tourney_id, '-', 1)::int AS year,
+            CASE SPLIT_PART(tourney_id, '-', 2)
+                WHEN '580' THEN 'ao'
+                WHEN '520' THEN 'rg'
+                WHEN '540' THEN 'w'
+                WHEN '560' THEN 'us'
+            END AS slam
+        FROM atp_player_matches
+        WHERE SPLIT_PART(tourney_id, '-', 2) IN ('580', '520', '540', '560')
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+    return {
+        (int(r["year"]), r["slam"])
+        for r in rows
+        if r["slam"] is not None
+    }
+
+
+def _enrich_grand_slam_results(
+    player_rows: list[dict],
+    global_held: set[tuple[int, str]],
+) -> list[dict]:
+    """Добавляет N/T и предстоящие турниры (Wimbledon 2020, текущий год)."""
+    if not player_rows:
+        return player_rows
+
+    existing = {(int(r["year"]), r["slam"]) for r in player_rows}
+    player_by_year: dict[int, set[str]] = {}
+    years: list[int] = []
+
+    for row in player_rows:
+        year = int(row["year"])
+        years.append(year)
+        player_by_year.setdefault(year, set()).add(row["slam"])
+
+    first_year = min(years)
+    last_year = max(years)
+
+    enriched = list(player_rows)
+
+    for year in range(first_year, last_year + 1):
+        for slam in SLAM_KEYS:
+            key = (year, slam)
+            if key in existing:
+                continue
+            status = resolve_slam_result(
+                year,
+                slam,
+                None,
+                global_held,
+                player_by_year.get(year, set()),
+            )
+            if status != RESULT_ABSENT:
+                enriched.append({"year": year, "slam": slam, "result": status})
+                existing.add(key)
+
+    enriched.sort(key=lambda r: (-int(r["year"]), r["slam"]))
+    return enriched
+
+
+def _build_masters_era_groups(calendar_rows, player_rows):
+    """Группирует годы с одинаковым набором Masters и строит строки для игрока."""
+    raw_calendar: dict[int, list[str]] = {}
+    global_held: set[tuple[int, str]] = set()
+
+    for row in calendar_rows:
+        year = int(row["year"])
+        name = row["tourney_name"]
+        global_held.add((year, name))
+        if year not in raw_calendar:
+            raw_calendar[year] = []
+        if name not in raw_calendar[year]:
+            raw_calendar[year].append(name)
+
+    year_tournaments = normalize_masters_calendar(raw_calendar)
+
+    if not year_tournaments:
+        return []
+
+    player_results: dict[tuple[int, str], str] = {}
+    player_by_year: dict[int, set[str]] = {}
+    player_years: list[int] = []
+
+    for row in player_rows:
+        year = int(row["year"])
+        name = row["tourney_name"]
+        player_results[(year, name)] = row["result"]
+        player_by_year.setdefault(year, set()).add(name)
+        player_years.append(year)
+
+    if not player_years:
+        return []
+
+    player_first = min(player_years)
+    player_last = max(player_years)
+
+    years = sorted(year_tournaments.keys())
+    groups = []
+    i = 0
+
+    while i < len(years):
+        era_start = years[i]
+        tournament_set = frozenset(year_tournaments[era_start])
+        j = i + 1
+        while j < len(years) and frozenset(year_tournaments[years[j]]) == tournament_set:
+            j += 1
+        era_end = years[j - 1]
+        # Порядок колонок — хронология последнего года эпохи (актуальный календарь)
+        tournaments = list(year_tournaments[era_end])
+
+        row_start = max(era_start, player_first)
+        row_end = min(era_end, player_last)
+
+        if row_start <= row_end:
+            rows = []
+            for year in range(row_end, row_start - 1, -1):
+                tourneys_in_year = player_by_year.get(year, set())
+                rows.append({
+                    "year": year,
+                    "results": {
+                        name: resolve_masters_result(
+                            year,
+                            name,
+                            player_results.get((year, name)),
+                            global_held,
+                            tourneys_in_year,
+                        )
+                        for name in tournaments
+                    },
+                })
+
+            groups.append({
+                "startYear": era_start,
+                "endYear": era_end,
+                "tournaments": tournaments,
+                "rows": rows,
+            })
+
+        i = j
+
+    groups.sort(key=lambda g: g["startYear"], reverse=True)
+    return groups
+
+
+@router.get("/{player_id}/masters")
+def get_masters_results(player_id: int):
+    """
+    ATP Masters 1000: лучший результат игрока по каждому турниру в году,
+    с группировкой эпох, когда менялся состав Masters на туре.
+    """
+
+    calendar_sql = """
+        SELECT
+            LEFT(match_date, 4)::int AS year,
+            tourney_name,
+            MIN(tourney_date::numeric) AS sort_key
+        FROM atp_player_matches
+        WHERE tourney_level = 'M'
+          AND match_date IS NOT NULL
+          AND LEFT(match_date, 4) ~ '^[0-9]{4}$'
+        GROUP BY 1, 2
+        ORDER BY 1, 3
+    """
+
+    player_sql = """
+        WITH masters_matches AS (
+            SELECT
+                LEFT(match_date, 4)::int AS year,
+                tourney_name,
+                round,
+                won_match,
+                CASE
+                    WHEN round = 'R128' THEN 1
+                    WHEN round = 'R64'  THEN 2
+                    WHEN round = 'R32'  THEN 3
+                    WHEN round = 'R16'  THEN 4
+                    WHEN round = 'R48'  THEN 4
+                    WHEN round = 'R24'  THEN 4
+                    WHEN round = 'QF'   THEN 5
+                    WHEN round = 'SF'   THEN 6
+                    WHEN round = 'F'    THEN 7
+                    ELSE 0
+                END AS round_rank
+            FROM atp_player_matches
+            WHERE player_id = %s
+              AND tourney_level = 'M'
+              AND match_date IS NOT NULL
+        ),
+
+        best_rounds AS (
+            SELECT DISTINCT ON (year, tourney_name)
+                year,
+                tourney_name,
+                round,
+                won_match,
+                round_rank
+            FROM masters_matches
+            ORDER BY year, tourney_name, round_rank DESC
+        )
+
+        SELECT
+            year,
+            tourney_name,
+            CASE
+                WHEN round = 'F' AND won_match IN ('1', '1.0') THEN 'W'
+                ELSE round
+            END AS result
+        FROM best_rounds
+        ORDER BY year DESC, tourney_name
+    """
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(calendar_sql)
+                calendar_rows = cur.fetchall()
+
+                cur.execute(player_sql, (str(player_id),))
+                player_rows = cur.fetchall()
+
+        groups = _build_masters_era_groups(
+            [dict(r) for r in calendar_rows],
+            [dict(r) for r in player_rows],
+        )
+
+        return {
+            "player_id": player_id,
+            "groups": groups,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+
+
+@router.get("/{player_id}/tournament-matches")
+def get_tournament_matches(
+    player_id: int,
+    year: int = Query(..., ge=1968, le=2100),
+    slam: str | None = Query(None),
+    tourney_name: str | None = Query(None),
+):
+    """
+    Матчи игрока на турнире (от первого круга до вылета/титула).
+    slam: ao|rg|w|us  или  tourney_name для Masters.
+    """
+    if slam and tourney_name:
+        raise HTTPException(status_code=400, detail="Укажите slam или tourney_name, не оба")
+    if not slam and not tourney_name:
+        raise HTTPException(status_code=400, detail="Нужен slam или tourney_name")
+
+    if slam:
+        suffix = SLAM_SUFFIX.get(slam)
+        if not suffix:
+            raise HTTPException(status_code=400, detail="Неизвестный slam")
+        filter_sql = "tourney_id = %s"
+        filter_params: tuple = (f"{year}-{suffix}",)
+    else:
+        filter_sql = "tourney_level = 'M' AND tourney_name = %s AND LEFT(match_date, 4) = %s"
+        filter_params = (tourney_name, str(year))
+
+    sql = f"""
+        SELECT
+            round,
+            opponent_name,
+            score,
+            won_match,
+            tourney_name,
+            {ROUND_ORDER_SQL} AS round_order
+        FROM atp_player_matches
+        WHERE player_id = %s
+          AND {filter_sql}
+        ORDER BY round_order, match_num::numeric NULLS LAST
+    """
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (str(player_id), *filter_params))
+                rows = cur.fetchall()
+
+        if not rows:
+            return {
+                "player_id": player_id,
+                "year": year,
+                "tournament": tourney_name or slam,
+                "matches": [],
+            }
+
+        matches = []
+        for row in rows:
+            won = str(row["won_match"]) in ("1", "1.0")
+            matches.append({
+                "round": row["round"],
+                "opponent": row["opponent_name"] or "—",
+                "score": player_perspective_score(row["score"], won),
+                "won": won,
+            })
+
+        return {
+            "player_id": player_id,
+            "year": year,
+            "tournament": rows[0]["tourney_name"],
+            "matches": matches,
+        }
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")

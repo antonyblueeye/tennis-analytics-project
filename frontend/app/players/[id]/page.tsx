@@ -10,6 +10,8 @@ import { iocToAlpha2, iocToName } from '../../lib/ioc';
 import { getPlayerImage } from '../../lib/wiki';
 import { formatDobWithAge } from '../../lib/player';
 import RankingHistoryChart from '../../components/RankingHistoryChart';
+import PlayerOverviewStubs from '../../components/PlayerOverviewStubs';
+import TournamentResultPopover from '../../components/TournamentResultPopover';
 
 countries.registerLocale(enLocale);
 
@@ -21,6 +23,7 @@ const GRAND_SLAM_ICONS = {
 } as const;
 
 type SlamKey = keyof typeof GRAND_SLAM_ICONS;
+type PlayerTab = 'overview' | 'grand-slam' | 'masters';
 
 interface Player {
   player_id: number | string;
@@ -53,6 +56,34 @@ interface SlamYearRow {
   us: string;
 }
 
+interface MastersYearRow {
+  year: number;
+  results: Record<string, string>;
+}
+
+interface MastersEraGroup {
+  startYear: number;
+  endYear: number;
+  tournaments: string[];
+  rows: MastersYearRow[];
+}
+
+interface SlamSlamStat {
+  key: SlamKey;
+  label: string;
+  icon: string;
+  titles: number;
+  best: string;
+  appearances: number;
+}
+
+interface MastersTourneyStat {
+  name: string;
+  titles: number;
+  best: string;
+  appearances: number;
+}
+
 const GRAND_SLAMS: { key: SlamKey; label: string; icon: string }[] = [
   { key: 'ao', label: 'Australian Open', icon: GRAND_SLAM_ICONS.ao },
   { key: 'rg', label: 'Roland Garros', icon: GRAND_SLAM_ICONS.rg },
@@ -60,11 +91,21 @@ const GRAND_SLAMS: { key: SlamKey; label: string; icon: string }[] = [
   { key: 'us', label: 'US Open', icon: GRAND_SLAM_ICONS.us },
 ];
 
+const ROUND_RANK: Record<string, number> = {
+  W: 8, F: 7, SF: 6, QF: 5, R16: 4, R32: 3, R64: 2, R128: 1,
+};
+
 const handLabel: Record<string, string> = {
   R: 'Right',
   L: 'Left',
   U: 'Unknown',
 };
+
+const TABS: { id: PlayerTab; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'grand-slam', label: 'Grand Slam' },
+  { id: 'masters', label: 'Masters' },
+];
 
 function getInitials(first: string | null, last: string | null) {
   const f = first ? first.charAt(0) : '';
@@ -78,6 +119,10 @@ function formatHeight(height: number | string | null) {
   return Number.isFinite(n) ? `${Math.round(n)} cm` : `${height} cm`;
 }
 
+function isCountableResult(result: string) {
+  return result !== '—' && result !== 'N/T' && result !== '···';
+}
+
 function getSlamResultClass(result: string) {
   switch (result) {
     case 'W':
@@ -88,6 +133,10 @@ function getSlamResultClass(result: string) {
       return 'slam-result-sf';
     case 'QF':
       return 'slam-result-qf';
+    case 'N/T':
+      return 'slam-result-nth';
+    case '···':
+      return 'slam-result-upcoming';
     default:
       return '';
   }
@@ -126,6 +175,131 @@ function buildSlamGrid(results: GrandSlamResult[]): SlamYearRow[] {
   return filled;
 }
 
+function computeSlamStats(results: GrandSlamResult[]) {
+  const playable = results.filter((r) => isCountableResult(r.result));
+  const titles = playable.filter((r) => r.result === 'W').length;
+  const finals = playable.filter((r) => r.result === 'W' || r.result === 'F').length;
+  const semis = playable.filter((r) => ['W', 'F', 'SF'].includes(r.result)).length;
+  const seasons = new Set(playable.map((r) => r.year)).size;
+
+  const bySlam: SlamSlamStat[] = GRAND_SLAMS.map((slam) => {
+    const slamResults = playable.filter((r) => r.slam === slam.key);
+    const best = slamResults.reduce(
+      (acc, r) => ((ROUND_RANK[r.result] ?? 0) > (ROUND_RANK[acc] ?? 0) ? r.result : acc),
+      '—'
+    );
+    return {
+      key: slam.key,
+      label: slam.label,
+      icon: slam.icon,
+      titles: slamResults.filter((r) => r.result === 'W').length,
+      best,
+      appearances: slamResults.length,
+    };
+  });
+
+  return { titles, finals, semis, seasons, bySlam };
+}
+
+function computeMastersStats(groups: MastersEraGroup[]) {
+  const entries: { name: string; result: string }[] = [];
+
+  for (const group of groups) {
+    for (const row of group.rows) {
+      for (const name of group.tournaments) {
+        const result = row.results[name] ?? '—';
+        if (isCountableResult(result)) {
+          entries.push({ name, result });
+        }
+      }
+    }
+  }
+
+  const titles = entries.filter((e) => e.result === 'W').length;
+  const finals = entries.filter((e) => e.result === 'W' || e.result === 'F').length;
+  const semis = entries.filter((e) => ['W', 'F', 'SF'].includes(e.result)).length;
+
+  const tourneyMap = new Map<string, { titles: number; best: string; appearances: number }>();
+  for (const { name, result } of entries) {
+    const cur = tourneyMap.get(name) ?? { titles: 0, best: '—', appearances: 0 };
+    cur.appearances += 1;
+    if (result === 'W') cur.titles += 1;
+    if ((ROUND_RANK[result] ?? 0) > (ROUND_RANK[cur.best] ?? 0)) cur.best = result;
+    tourneyMap.set(name, cur);
+  }
+
+  const byTournament: MastersTourneyStat[] = Array.from(tourneyMap.entries())
+    .map(([name, stats]) => ({ name: formatMastersLabel(name), ...stats }))
+    .sort(
+      (a, b) =>
+        b.titles - a.titles ||
+        (ROUND_RANK[b.best] ?? 0) - (ROUND_RANK[a.best] ?? 0) ||
+        b.appearances - a.appearances
+    );
+
+  return { titles, finals, semis, totalEvents: entries.length, byTournament };
+}
+
+function mastersGridColumns(count: number) {
+  return `44px repeat(${count}, minmax(0, 1fr))`;
+}
+
+function formatMastersLabel(name: string) {
+  return name.replace(/ Masters$/, '');
+}
+
+function formatEraLabel(startYear: number, endYear: number) {
+  return startYear === endYear ? `${startYear}` : `${startYear}–${endYear}`;
+}
+
+function ResultsLegend() {
+  return (
+    <div className="slam-legend">
+      <div className="slam-legend-item">
+        <span className="slam-legend-badge slam-result-w">W</span>
+        <span>Winner</span>
+      </div>
+      <div className="slam-legend-item">
+        <span className="slam-legend-badge slam-result-f">F</span>
+        <span>Finalist</span>
+      </div>
+      <div className="slam-legend-item">
+        <span className="slam-legend-badge slam-result-sf">SF</span>
+        <span>Semi-final</span>
+      </div>
+      <div className="slam-legend-item">
+        <span className="slam-legend-badge slam-result-qf">QF</span>
+        <span>Quarter-final</span>
+      </div>
+      <div className="slam-legend-item">
+        <span className="slam-legend-badge slam-result-nth">N/T</span>
+        <span>Not held</span>
+      </div>
+      <div className="slam-legend-item">
+        <span className="slam-legend-badge slam-result-upcoming">···</span>
+        <span>Upcoming</span>
+      </div>
+    </div>
+  );
+}
+
+function StatCards({
+  items,
+}: {
+  items: { label: string; value: string | number; accent?: boolean }[];
+}) {
+  return (
+    <div className="player-stat-grid">
+      {items.map((item) => (
+        <div key={item.label} className={`player-stat-card${item.accent ? ' player-stat-card-accent' : ''}`}>
+          <span className="player-stat-value">{item.value}</span>
+          <span className="player-stat-label">{item.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function PlayerProfilePage() {
   const params = useParams();
   const playerId = Number(params.id);
@@ -136,6 +310,8 @@ export default function PlayerProfilePage() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [rankingHistory, setRankingHistory] = useState<RankingHistory[]>([]);
   const [grandSlamData, setGrandSlamData] = useState<GrandSlamResult[]>([]);
+  const [mastersGroups, setMastersGroups] = useState<MastersEraGroup[]>([]);
+  const [activeTab, setActiveTab] = useState<PlayerTab>('overview');
 
   useEffect(() => {
     if (!playerId || Number.isNaN(playerId)) {
@@ -167,6 +343,14 @@ export default function PlayerProfilePage() {
           setGrandSlamData(slamData.results || []);
         }
 
+        const mastersRes = await fetch(
+          `http://127.0.0.1:8000/api/players/${playerId}/masters`
+        );
+        if (mastersRes.ok) {
+          const mastersData = await mastersRes.json();
+          setMastersGroups(mastersData.groups || []);
+        }
+
         const fullName = `${data.name_first} ${data.name_last}`;
         const img = await getPlayerImage(data.wikidata_id, fullName);
         if (img) setImageUrl(img);
@@ -182,6 +366,8 @@ export default function PlayerProfilePage() {
   }, [playerId]);
 
   const slamRows = useMemo(() => buildSlamGrid(grandSlamData), [grandSlamData]);
+  const slamStats = useMemo(() => computeSlamStats(grandSlamData), [grandSlamData]);
+  const mastersStats = useMemo(() => computeMastersStats(mastersGroups), [mastersGroups]);
 
   if (loading) {
     return (
@@ -217,130 +403,301 @@ export default function PlayerProfilePage() {
       <Link href="/players" className="back-link">← Back to search</Link>
 
       <article className="player-profile-card">
-        <div className="player-profile-header">
-          <div className="player-profile-photo">
-            {imageUrl ? (
-              <img src={imageUrl} alt={fullName} />
-            ) : (
-              <div className="player-profile-photo-fallback">
-                {getInitials(player.name_first, player.name_last)}
-              </div>
-            )}
-          </div>
-
-          <div className="player-profile-info">
-            <h1 className="player-profile-name">{fullName}</h1>
-            <p className="player-profile-id">ATP ID · {player.player_id}</p>
-
-            <div className="player-profile-fields">
-              <div className="profile-field">
-                <span className="profile-field-icon">🎂</span>
-                <span className="profile-field-label">Date of birth</span>
-                <span className="profile-field-value">
-                  {formatDobWithAge(player.dob)}
-                </span>
-              </div>
-
-              <div className="profile-field">
-                <span className="profile-field-icon">🖐</span>
-                <span className="profile-field-label">Playing hand</span>
-                <span className="profile-field-value">
-                  {player.hand ? handLabel[player.hand] || player.hand : '—'}
-                </span>
-              </div>
-
-              <div className="profile-field">
-                <span className="profile-field-icon">📏</span>
-                <span className="profile-field-label">Height</span>
-                <span className="profile-field-value">
-                  {formatHeight(player.height)}
-                </span>
-              </div>
-
-              <div className="profile-field">
-                <span className="profile-field-icon">🌍</span>
-                <span className="profile-field-label">Country</span>
-                <span className="profile-field-value">
-                  {countryName || '—'}
-                  {countryCode && (
-                    <ReactCountryFlag
-                      countryCode={countryCode}
-                      svg
-                      style={{ width: '1.4em', height: '1.4em', borderRadius: '3px' }}
-                      title={player.ioc || ''}
-                    />
-                  )}
-                </span>
-              </div>
-            </div>
-          </div>
+        <div className="player-tabs" role="tablist">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className={`player-tab${activeTab === tab.id ? ' player-tab-active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        <div className="player-profile-analytics">
-          {rankingHistory.length > 0 && (
-            <RankingHistoryChart data={rankingHistory} />
-          )}
-
-          <div className="analytics-card">
-            <h3 className="analytics-title">Grand Slam Results</h3>
-
-            <div className="slam-legend">
-              <div className="slam-legend-item">
-                <span className="slam-legend-badge slam-result-w">W</span>
-                <span>Winner</span>
-              </div>
-              <div className="slam-legend-item">
-                <span className="slam-legend-badge slam-result-f">F</span>
-                <span>Finalist</span>
-              </div>
-              <div className="slam-legend-item">
-                <span className="slam-legend-badge slam-result-sf">SF</span>
-                <span>Semi-final</span>
-              </div>
-              <div className="slam-legend-item">
-                <span className="slam-legend-badge slam-result-qf">QF</span>
-                <span>Quarter-final</span>
-              </div>
-            </div>
-
-            {slamRows.length === 0 ? (
-              <div className="empty-state" style={{ padding: '32px 16px' }}>
-                <p className="empty-sub">No Grand Slam results found</p>
-              </div>
-            ) : (
-              <div className="slam-table">
-                <div className="slam-row slam-header">
-                  <div className="slam-cell year-cell">Year</div>
-                  {GRAND_SLAMS.map((slam) => (
-                    <div key={slam.key} className="slam-cell slam-header-cell">
-                      <div className="slam-icon-circle">
-                        <img src={slam.icon} alt={slam.label} />
+        <div className="player-tab-panel" role="tabpanel">
+          {activeTab === 'overview' && (
+            <>
+              <div className="player-profile-header">
+                <div className="player-profile-photo-col">
+                  <div className="player-profile-photo">
+                    {imageUrl ? (
+                      <img src={imageUrl} alt={fullName} />
+                    ) : (
+                      <div className="player-profile-photo-fallback">
+                        {getInitials(player.name_first, player.name_last)}
                       </div>
-                      <span>{slam.label}</span>
+                    )}
+                  </div>
+
+                  {rankingHistory.length > 0 && (
+                    <div className="player-current-rank">
+                      <span className="player-current-rank-num">#{rankingHistory[0].rank}</span>
+                      <span className="player-current-rank-label">Current ranking</span>
+                      {rankingHistory[0].points != null && (
+                        <span className="player-current-rank-points">
+                          {rankingHistory[0].points.toLocaleString()} pts
+                        </span>
+                      )}
                     </div>
-                  ))}
+                  )}
                 </div>
 
-                {slamRows.map((yearRow) => (
-                  <div key={yearRow.year} className="slam-row">
-                    <div className="slam-cell year-cell">{yearRow.year}</div>
-                    {GRAND_SLAMS.map((slam) => {
-                      const result = yearRow[slam.key];
-                      return (
-                        <div
-                          key={slam.key}
-                          className={`slam-cell ${getSlamResultClass(result)}`}
-                        >
-                          {result}
-                        </div>
-                      );
-                    })}
+                <div className="player-profile-info">
+                  <h1 className="player-profile-name">{fullName}</h1>
+
+                  <div className="player-profile-fields">
+                    <div className="profile-field">
+                      <span className="profile-field-icon">🎂</span>
+                      <span className="profile-field-label">Date of birth</span>
+                      <span className="profile-field-value">
+                        {formatDobWithAge(player.dob)}
+                      </span>
+                    </div>
+
+                    <div className="profile-field">
+                      <span className="profile-field-icon">🖐</span>
+                      <span className="profile-field-label">Playing hand</span>
+                      <span className="profile-field-value">
+                        {player.hand ? handLabel[player.hand] || player.hand : '—'}
+                      </span>
+                    </div>
+
+                    <div className="profile-field">
+                      <span className="profile-field-icon">📏</span>
+                      <span className="profile-field-label">Height</span>
+                      <span className="profile-field-value">
+                        {formatHeight(player.height)}
+                      </span>
+                    </div>
+
+                    <div className="profile-field">
+                      <span className="profile-field-icon">🌍</span>
+                      <span className="profile-field-label">Country</span>
+                      <span className="profile-field-value">
+                        {countryName || '—'}
+                        {countryCode && (
+                          <ReactCountryFlag
+                            countryCode={countryCode}
+                            svg
+                            style={{ width: '1.4em', height: '1.4em', borderRadius: '3px' }}
+                            title={player.ioc || ''}
+                          />
+                        )}
+                      </span>
+                    </div>
                   </div>
-                ))}
+                </div>
               </div>
+
+              <PlayerOverviewStubs />
+
+              {rankingHistory.length > 0 && (
+                <div className="player-overview-chart">
+                  <RankingHistoryChart data={rankingHistory} />
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'grand-slam' && (
+              <>
+                <section className="player-tab-block">
+                  <h3 className="analytics-title">Grand Slam Results</h3>
+                  <ResultsLegend />
+
+                  {slamRows.length === 0 ? (
+                    <div className="empty-state" style={{ padding: '32px 16px' }}>
+                      <p className="empty-sub">No Grand Slam results found</p>
+                    </div>
+                  ) : (
+                    <div className="slam-table">
+                      <div className="slam-row slam-header">
+                        <div className="slam-cell year-cell">Year</div>
+                        {GRAND_SLAMS.map((slam) => (
+                          <div key={slam.key} className="slam-cell slam-header-cell">
+                            <div className="slam-icon-circle">
+                              <img src={slam.icon} alt={slam.label} />
+                            </div>
+                            <span>{slam.label}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {slamRows.map((yearRow) => (
+                        <div key={yearRow.year} className="slam-row">
+                          <div className="slam-cell year-cell">{yearRow.year}</div>
+                          {GRAND_SLAMS.map((slam) => {
+                            const result = yearRow[slam.key];
+                            return (
+                              <TournamentResultPopover
+                                key={slam.key}
+                                playerId={playerId}
+                                year={yearRow.year}
+                                result={result}
+                                slam={slam.key}
+                                className={`slam-cell ${getSlamResultClass(result)}`}
+                              />
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section className="player-tab-block player-tab-block-secondary">
+                  <h3 className="analytics-title">Grand Slam Analytics</h3>
+                  <p className="player-tab-desc">
+                    Career summary across all four majors — titles, deep runs and best result at each tournament.
+                  </p>
+
+                  <StatCards
+                    items={[
+                      { label: 'Titles', value: slamStats.titles, accent: true },
+                      { label: 'Finals', value: slamStats.finals },
+                      { label: 'Semi-finals+', value: slamStats.semis },
+                      { label: 'Seasons played', value: slamStats.seasons },
+                    ]}
+                  />
+
+                  <div className="player-breakdown-grid">
+                    {slamStats.bySlam.map((slam) => (
+                      <div key={slam.key} className="player-breakdown-card">
+                        <div className="player-breakdown-header">
+                          <div className="slam-icon-circle player-breakdown-icon">
+                            <img src={slam.icon} alt={slam.label} />
+                          </div>
+                          <div>
+                            <p className="player-breakdown-name">{slam.label}</p>
+                            <p className="player-breakdown-meta">
+                              {slam.appearances} appearances
+                            </p>
+                          </div>
+                        </div>
+                        <div className="player-breakdown-stats">
+                          <div>
+                            <span className="player-breakdown-stat-val">{slam.titles}</span>
+                            <span className="player-breakdown-stat-lbl">Titles</span>
+                          </div>
+                          <div>
+                            <span className={`player-breakdown-stat-val ${getSlamResultClass(slam.best)}`}>
+                              {slam.best}
+                            </span>
+                            <span className="player-breakdown-stat-lbl">Best</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </>
+            )}
+
+            {activeTab === 'masters' && (
+              <>
+                <section className="player-tab-block">
+                  <h3 className="analytics-title">ATP Masters 1000 Results</h3>
+                  <ResultsLegend />
+
+                  {mastersGroups.length === 0 ? (
+                    <div className="empty-state" style={{ padding: '32px 16px' }}>
+                      <p className="empty-sub">No Masters 1000 results found</p>
+                    </div>
+                  ) : (
+                    <div className="masters-groups">
+                      {mastersGroups.map((group) => (
+                        <div
+                          key={`${group.startYear}-${group.endYear}`}
+                          className="masters-era-block"
+                        >
+                          <p className="masters-era-label">
+                            {formatEraLabel(group.startYear, group.endYear)}
+                          </p>
+
+                          <div className="slam-table masters-table">
+                            <div
+                              className="slam-row slam-header masters-row"
+                              style={{ gridTemplateColumns: mastersGridColumns(group.tournaments.length) }}
+                            >
+                              <div className="slam-cell year-cell">Year</div>
+                              {group.tournaments.map((name) => (
+                                <div key={name} className="slam-cell masters-header-cell">
+                                  {formatMastersLabel(name)}
+                                </div>
+                              ))}
+                            </div>
+
+                            {group.rows.map((yearRow) => (
+                              <div
+                                key={yearRow.year}
+                                className="slam-row masters-row"
+                                style={{ gridTemplateColumns: mastersGridColumns(group.tournaments.length) }}
+                              >
+                                <div className="slam-cell year-cell">{yearRow.year}</div>
+                                {group.tournaments.map((name) => {
+                                  const result = yearRow.results[name] ?? '—';
+                                  return (
+                                    <TournamentResultPopover
+                                      key={name}
+                                      playerId={playerId}
+                                      year={yearRow.year}
+                                      result={result}
+                                      tourneyName={name}
+                                      className={`slam-cell ${getSlamResultClass(result)}`}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section className="player-tab-block player-tab-block-secondary">
+                  <h3 className="analytics-title">Masters Analytics</h3>
+                  <p className="player-tab-desc">
+                    Aggregated performance across ATP Masters 1000 events — titles, finals and breakdown by tournament.
+                  </p>
+
+                  <StatCards
+                    items={[
+                      { label: 'Titles', value: mastersStats.titles, accent: true },
+                      { label: 'Finals', value: mastersStats.finals },
+                      { label: 'Semi-finals+', value: mastersStats.semis },
+                      { label: 'Events played', value: mastersStats.totalEvents },
+                    ]}
+                  />
+
+                  {mastersStats.byTournament.length > 0 && (
+                    <div className="player-tourney-list">
+                      <p className="player-tourney-list-title">By tournament</p>
+                      <div className="player-tourney-list-body">
+                        {mastersStats.byTournament.map((t) => (
+                          <div key={t.name} className="player-tourney-row">
+                            <span className="player-tourney-name">{t.name}</span>
+                            <span className="player-tourney-titles">
+                              {t.titles > 0 ? `${t.titles}× W` : '—'}
+                            </span>
+                            <span className={`player-tourney-best ${getSlamResultClass(t.best)}`}>
+                              {t.best}
+                            </span>
+                            <span className="player-tourney-apps">{t.appearances} apps</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </section>
+              </>
             )}
           </div>
-        </div>
       </article>
     </div>
   );
