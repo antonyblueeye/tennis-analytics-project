@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   ResponsiveContainer,
   PieChart,
@@ -74,6 +75,16 @@ const MOCK_VS_COUNTRY = {
   bVsACountry: { label: 'vs Serbian players', wins: 12, losses: 14, pct: 46.2 },
 };
 
+const MOCK_VS_AGE = {
+  aVsBAge: { wins: 86, losses: 32, pct: 72.9 },
+  bVsAAge: { wins: 64, losses: 38, pct: 62.7 },
+};
+
+const MOCK_VS_HAND = {
+  aVsBHand: { wins: 124, losses: 44, pct: 73.8 },
+  bVsAHand: { wins: 118, losses: 52, pct: 69.4 },
+};
+
 const MOCK_TOURNEY_LEVEL = [
   { name: 'Grand Slam', value: 9, color: '#eab308' },
   { name: 'Masters', value: 7, color: '#8b5cf6' },
@@ -100,6 +111,23 @@ const MOCK_INSIGHTS = [
 
 function playerName(p: PickedPlayer) {
   return `${p.name_first} ${p.name_last}`.trim();
+}
+
+function formatHand(hand: string | null): string {
+  if (!hand) return 'unknown-hand';
+  const h = hand.trim().toUpperCase();
+  if (h === 'R' || h.startsWith('RIGHT')) return 'right-handed';
+  if (h === 'L' || h.startsWith('LEFT')) return 'left-handed';
+  if (h === 'U') return 'ambidextrous';
+  return hand.toLowerCase();
+}
+
+function ageBracket(age: number): string {
+  if (age < 21) return 'under 21';
+  if (age <= 25) return '21–25';
+  if (age <= 30) return '26–30';
+  if (age <= 35) return '31–35';
+  return '36+';
 }
 
 function initials(p: PickedPlayer) {
@@ -214,6 +242,34 @@ export default function HeadToHeadStubs({ playerA, playerB }: Props) {
     { name: nameA, value: MOCK_H2H.winsA, color: COLOR_A },
     { name: nameB, value: MOCK_H2H.winsB, color: COLOR_B },
   ];
+
+  const vsAgeRows = useMemo(
+    () => ({
+      a: {
+        ...MOCK_VS_AGE.aVsBAge,
+        label: `vs age ${ageBracket(MOCK_PROFILE.b.age)} opponents`,
+      },
+      b: {
+        ...MOCK_VS_AGE.bVsAAge,
+        label: `vs age ${ageBracket(MOCK_PROFILE.a.age)} opponents`,
+      },
+    }),
+    []
+  );
+
+  const vsHandRows = useMemo(
+    () => ({
+      a: {
+        ...MOCK_VS_HAND.aVsBHand,
+        label: `vs ${formatHand(playerB.hand)} opponents`,
+      },
+      b: {
+        ...MOCK_VS_HAND.bVsAHand,
+        label: `vs ${formatHand(playerA.hand)} opponents`,
+      },
+    }),
+    [playerA.hand, playerB.hand]
+  );
 
   return (
     <div className="h2h-stubs">
@@ -396,6 +452,24 @@ export default function HeadToHeadStubs({ playerA, playerB }: Props) {
             nameB={nameB}
             rowA={MOCK_VS_COUNTRY.aVsBCountry}
             rowB={MOCK_VS_COUNTRY.bVsACountry}
+          />
+          <MatchupCard
+            title="vs opponent age"
+            subtitle="Career win rate in the opponent's age bracket at match date"
+            nameA={nameA}
+            nameB={nameB}
+            rowA={vsAgeRows.a}
+            rowB={vsAgeRows.b}
+          />
+        </div>
+        <div className="overview-two-col h2h-matchup-spaced">
+          <MatchupCard
+            title="vs opponent handedness"
+            subtitle={`Record vs ${formatHand(playerB.hand)} / ${formatHand(playerA.hand)} players`}
+            nameA={nameA}
+            nameB={nameB}
+            rowA={vsHandRows.a}
+            rowB={vsHandRows.b}
           />
           <div className="overview-card h2h-chart-card">
             <div className="overview-card-head">
