@@ -1,7 +1,7 @@
 # backend/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import players, matches
+from routers import players, matches, dashboard
 
 app = FastAPI(
     title="Tennis Analytics API",
@@ -20,6 +20,7 @@ app.add_middleware(
 # Подключаем роутеры
 app.include_router(players.router)
 app.include_router(matches.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/health", tags=["system"])

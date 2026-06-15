@@ -3968,6 +3968,15 @@ nextjs-portal {
   width: 100%;
 }
 
+.dash-surface-empty {
+  margin: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 24px 0;
+}
+
 .dash-surface-legend {
   flex: 1;
   list-style: none;

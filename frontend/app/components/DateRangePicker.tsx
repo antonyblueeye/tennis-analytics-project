@@ -7,10 +7,10 @@ export interface DateRange {
   to: Date;
 }
 
-type PresetId = 'this-week' | 'this-year' | 'last-year';
+type PresetId = 'this-month' | 'this-year' | 'last-year';
 
 const PRESETS: { id: PresetId; label: string }[] = [
-  { id: 'this-week', label: 'This week' },
+  { id: 'this-month', label: 'This month' },
   { id: 'this-year', label: 'This year' },
   { id: 'last-year', label: 'Last year' },
 ];
@@ -42,12 +42,11 @@ function getPresetRange(id: PresetId): DateRange {
   const now = new Date();
   const y = now.getFullYear();
 
-  if (id === 'this-week') {
-    const day = now.getDay();
-    const diff = day === 0 ? 6 : day - 1;
-    const from = new Date(now);
-    from.setDate(now.getDate() - diff);
-    return { from: startOfDay(from), to: startOfDay(now) };
+  if (id === 'this-month') {
+    return {
+      from: startOfDay(new Date(y, now.getMonth(), 1)),
+      to: startOfDay(new Date(y, now.getMonth() + 1, 0)),
+    };
   }
   if (id === 'last-year') {
     return { from: new Date(y - 1, 0, 1), to: new Date(y - 1, 11, 31) };

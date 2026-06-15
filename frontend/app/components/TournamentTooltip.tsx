@@ -1,4 +1,4 @@
-import type { DashboardTournament } from '../lib/dashboardTournaments';
+import type { DashboardTournament } from '../lib/tournamentLocations';
 
 interface Props {
   t: DashboardTournament;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { DashboardTournament } from '../lib/dashboardTournaments';
+import type { DashboardTournament } from '../lib/tournamentLocations';
 import TournamentTooltip from './TournamentTooltip';
 
 const MAP_W = 1000;
@@ -55,11 +55,17 @@ function levelClass(level: string) {
   return 'dash-map-marker-250';
 }
 
+interface MapTournament extends DashboardTournament {
+  city: string;
+  lat: number;
+  lng: number;
+}
+
 interface Props {
-  tournaments: DashboardTournament[];
-  hovered: DashboardTournament | null;
+  tournaments: MapTournament[];
+  hovered: MapTournament | null;
   showTooltip: boolean;
-  onHover: (t: DashboardTournament | null) => void;
+  onHover: (t: MapTournament | null) => void;
   worldGeo: GeoCollection;
 }
 
@@ -138,9 +144,9 @@ export default function TournamentWorldMap({
         </g>
 
         {markers.map((t) => {
-          const isActive = hovered?.name === t.name && hovered?.date === t.date;
+          const isActive = hovered?.logicalId === t.logicalId;
           return (
-            <g key={t.name + t.date}>
+            <g key={t.logicalId}>
               {isActive && (
                 <circle cx={t.x} cy={t.y} r={14} className="dash-map-pulse" />
               )}

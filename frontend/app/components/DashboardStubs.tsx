@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import ReactCountryFlag from 'react-country-flag';
 import {
   ResponsiveContainer,
   PieChart,
@@ -11,10 +12,13 @@ import {
 import type { DateRange } from './DateRangePicker';
 import TournamentWorldMap, { type GeoCollection } from './TournamentWorldMap';
 import TournamentTooltip from './TournamentTooltip';
+import { iocToAlpha2 } from '../lib/ioc';
 import {
-  DASHBOARD_TOURNAMENTS,
+  enrichTournament,
+  hasMapLocation,
+  type ApiTournament,
   type DashboardTournament,
-} from '../lib/dashboardTournaments';
+} from '../lib/tournamentLocations';
 
 const SURFACE_COLORS: Record<string, string> = {
   Hard: '#3b82f6',
@@ -23,42 +27,33 @@ const SURFACE_COLORS: Record<string, string> = {
   Carpet: '#8b5cf6',
 };
 
-const MOCK_SUMMARY = {
-  matches: 2847,
-  tournaments: 62,
+const MOCK_SURFACES_FALLBACK = [
+  { name: 'Hard', value: 0, pct: 0 },
+  { name: 'Clay', value: 0, pct: 0 },
+  { name: 'Grass', value: 0, pct: 0 },
+];
+
+type DashboardSummary = {
+  matches_played: number;
+  tournaments_played: number;
+  by_surface: { name: string; value: number; pct: number }[];
 };
 
-const MOCK_SURFACES = [
-  { name: 'Hard', value: 1420, pct: 49.9 },
-  { name: 'Clay', value: 892, pct: 31.3 },
-  { name: 'Grass', value: 412, pct: 14.5 },
-  { name: 'Carpet', value: 123, pct: 4.3 },
-];
+type TitleLeader = {
+  player_id: number | null;
+  player_name: string;
+  player_ioc: string | null;
+  titles: number;
+};
 
-const MOCK_TOURNAMENTS = DASHBOARD_TOURNAMENTS;
+type DashboardHighlight = {
+  icon: string;
+  label: string;
+  value: string;
+  sub?: string | null;
+};
 
 type HoverSource = 'map' | 'timeline' | null;
-
-const MOCK_TITLE_LEADERS = [
-  { name: 'Carlos Alcaraz', titles: 5, flag: '🇪🇸' },
-  { name: 'Jannik Sinner', titles: 3, flag: '🇮🇹' },
-  { name: 'Stefanos Tsitsipas', titles: 2, flag: '🇬🇷' },
-  { name: 'Andrey Rublev', titles: 2, flag: '🇷🇺' },
-  { name: 'Alexander Zverev', titles: 1, flag: '🇩🇪' },
-  { name: 'Holger Rune', titles: 1, flag: '🇩🇰' },
-  { name: 'Taylor Fritz', titles: 1, flag: '🇺🇸' },
-];
-
-const MOCK_INSIGHTS = [
-  { icon: '🔥', label: 'Longest win streak', value: 'Carlos Alcaraz', sub: '14 matches · Feb–Apr 2026' },
-  { icon: '📈', label: 'Best ranking jump', value: 'Holger Rune', sub: '+47 places in 6 weeks' },
-  { icon: '⏱️', label: 'Longest match', value: '5h 53m', sub: 'Musetti vs Cerundolo · RG 2025' },
-  { icon: '⚡', label: 'Fastest completed match', value: '32 min', sub: 'Fritz vs Tiafoe · Miami 2026' },
-  { icon: '🎾', label: 'Most aces in one match', value: '38', sub: 'Opelka vs Nakashima · Dallas' },
-  { icon: '💥', label: 'Biggest upset', value: '#112 → #3', sub: 'Mensik def. Zverev · Madrid QF' },
-  { icon: '🏟️', label: 'Most tiebreaks played', value: 'Holger Rune', sub: '18 tiebreak sets in period' },
-  { icon: '🌍', label: 'Most countries represented', value: '34 nations', sub: 'Across all tournament fields' },
-];
 
 function levelClass(level: string) {
   if (level === 'GS') return 'dash-timeline-level-gs';
@@ -67,9 +62,11 @@ function levelClass(level: string) {
   return 'dash-timeline-level-250';
 }
 
-function formatPeriod(range: DateRange) {
-  const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
-  return `${range.from.toLocaleDateString('en-GB', opts)} – ${range.to.toLocaleDateString('en-GB', opts)}`;
+function formatApiDate(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function dateToPosition(dateStr: string, range: DateRange) {
@@ -114,7 +111,7 @@ function layoutTimeline(tournaments: DashboardTournament[], range: DateRange): T
   return withPos.map((item) => {
     const cluster = byWeek.get(item.weekKey)!;
     const sorted = [...cluster].sort((a, b) => a.date.localeCompare(b.date));
-    const lane = sorted.findIndex((x) => x.name === item.name && x.date === item.date);
+    const lane = sorted.findIndex((x) => x.logicalId === item.logicalId);
     const clusterLeft =
       cluster.length > 1
         ? cluster.reduce((sum, c) => sum + c.left, 0) / cluster.length
@@ -146,6 +143,14 @@ export default function DashboardStubs({ range }: Props) {
   const [hoveredTourney, setHoveredTourney] = useState<DashboardTournament | null>(null);
   const [hoverSource, setHoverSource] = useState<HoverSource>(null);
   const [worldGeo, setWorldGeo] = useState<GeoCollection | null>(null);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [tournaments, setTournaments] = useState<DashboardTournament[]>([]);
+  const [tournamentsLoading, setTournamentsLoading] = useState(true);
+  const [titleLeaders, setTitleLeaders] = useState<TitleLeader[]>([]);
+  const [titlesLoading, setTitlesLoading] = useState(true);
+  const [highlights, setHighlights] = useState<DashboardHighlight[]>([]);
+  const [highlightsLoading, setHighlightsLoading] = useState(true);
 
   useEffect(() => {
     fetch('/world.geojson')
@@ -154,25 +159,123 @@ export default function DashboardStubs({ range }: Props) {
       .catch(console.error);
   }, []);
 
-  const scaleFactor = useMemo(() => {
-    const days = Math.max(
-      1,
-      (range.to.getTime() - range.from.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    return Math.min(1, days / 365);
-  }, [range]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const from = formatApiDate(range.from);
+    const to = formatApiDate(range.to);
 
-  const summary = useMemo(
-    () => ({
-      matches: Math.round(MOCK_SUMMARY.matches * scaleFactor),
-      tournaments: Math.max(1, Math.round(MOCK_SUMMARY.tournaments * scaleFactor)),
-    }),
-    [scaleFactor]
+    setSummaryLoading(true);
+    fetch(
+      `http://127.0.0.1:8000/api/dashboard/summary?from=${from}&to=${to}`,
+      { signal: controller.signal }
+    )
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: DashboardSummary) => setSummary(data))
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          console.error(err);
+          setSummary(null);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSummaryLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [range.from, range.to]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const from = formatApiDate(range.from);
+    const to = formatApiDate(range.to);
+
+    setTournamentsLoading(true);
+    setTitlesLoading(true);
+    setHighlightsLoading(true);
+
+    fetch(
+      `http://127.0.0.1:8000/api/dashboard/tournaments?from=${from}&to=${to}`,
+      { signal: controller.signal }
+    )
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: { results: ApiTournament[] }) => {
+        setTournaments(data.results.map(enrichTournament));
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          console.error(err);
+          setTournaments([]);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setTournamentsLoading(false);
+      });
+
+    fetch(
+      `http://127.0.0.1:8000/api/dashboard/titles?from=${from}&to=${to}&limit=15`,
+      { signal: controller.signal }
+    )
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: { results: TitleLeader[] }) => setTitleLeaders(data.results))
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          console.error(err);
+          setTitleLeaders([]);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setTitlesLoading(false);
+      });
+
+    fetch(
+      `http://127.0.0.1:8000/api/dashboard/highlights?from=${from}&to=${to}`,
+      { signal: controller.signal }
+    )
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: { results: DashboardHighlight[] }) => setHighlights(data.results))
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          console.error(err);
+          setHighlights([]);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setHighlightsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [range.from, range.to]);
+
+  const surfaceData =
+    summary?.by_surface.length
+      ? summary.by_surface
+      : summaryLoading
+        ? MOCK_SURFACES_FALLBACK
+        : [];
+
+  const maxTitles = titleLeaders[0]?.titles ?? 1;
+
+  const mapTournaments = useMemo(
+    () => tournaments.filter(hasMapLocation),
+    [tournaments]
   );
 
-  const maxTitles = MOCK_TITLE_LEADERS[0]?.titles ?? 1;
+  const mapHovered =
+    hoveredTourney && hasMapLocation(hoveredTourney) ? hoveredTourney : null;
 
-  const timelineItems = useMemo(() => layoutTimeline(MOCK_TOURNAMENTS, range), [range]);
+  const timelineItems = useMemo(() => layoutTimeline(tournaments, range), [tournaments, range]);
   const maxCluster = useMemo(
     () => Math.max(1, ...timelineItems.map((t) => t.clusterSize)),
     [timelineItems]
@@ -180,52 +283,63 @@ export default function DashboardStubs({ range }: Props) {
 
   return (
     <div className="dash-stubs">
-      <p className="overview-stub-badge">Preview · sample data · {formatPeriod(range)}</p>
 
       <section className="dash-summary-grid">
         <div className="dash-stat-card dash-stat-card-kpi">
           <span className="dash-stat-icon">🎾</span>
           <p className="dash-stat-label">Matches played</p>
-          <p className="dash-stat-value">{summary.matches.toLocaleString()}</p>
+          <p className="dash-stat-value">
+            {summaryLoading ? '…' : (summary?.matches_played ?? 0).toLocaleString()}
+          </p>
         </div>
         <div className="dash-stat-card dash-stat-card-kpi">
           <span className="dash-stat-icon">🏆</span>
           <p className="dash-stat-label">Tournaments held</p>
-          <p className="dash-stat-value">{summary.tournaments}</p>
+          <p className="dash-stat-value">
+            {summaryLoading ? '…' : (summary?.tournaments_played ?? 0).toLocaleString()}
+          </p>
         </div>
         <div className="dash-stat-card dash-stat-card-chart">
           <div className="dash-stat-chart-head">
             <p className="dash-stat-label">Matches by surface</p>
           </div>
           <div className="dash-surface-split">
-            <ResponsiveContainer width="100%" height={120}>
-              <PieChart>
-                <Pie
-                  data={MOCK_SURFACES}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={32}
-                  outerRadius={52}
-                  paddingAngle={2}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {MOCK_SURFACES.map((s) => (
-                    <Cell key={s.name} fill={SURFACE_COLORS[s.name]} />
+            {surfaceData.length === 0 && !summaryLoading ? (
+              <p className="dash-surface-empty">No matches in this period</p>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={120}>
+                  <PieChart>
+                    <Pie
+                      data={surfaceData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={32}
+                      outerRadius={52}
+                      paddingAngle={2}
+                      dataKey="value"
+                      stroke="none"
+                    >
+                      {surfaceData.map((s) => (
+                        <Cell key={s.name} fill={SURFACE_COLORS[s.name] ?? '#94a3b8'} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <ul className="dash-surface-legend">
+                  {surfaceData.map((s) => (
+                    <li key={s.name}>
+                      <span className="dash-surface-dot" style={{ background: SURFACE_COLORS[s.name] ?? '#94a3b8' }} />
+                      <span>{s.name}</span>
+                      <span className="dash-surface-pct">
+                        {summaryLoading ? '…' : `${s.pct}%`}
+                      </span>
+                    </li>
                   ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <ul className="dash-surface-legend">
-              {MOCK_SURFACES.map((s) => (
-                <li key={s.name}>
-                  <span className="dash-surface-dot" style={{ background: SURFACE_COLORS[s.name] }} />
-                  <span>{s.name}</span>
-                  <span className="dash-surface-pct">{s.pct}%</span>
-                </li>
-              ))}
-            </ul>
+                </ul>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -238,6 +352,11 @@ export default function DashboardStubs({ range }: Props) {
             <span>{range.from.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })}</span>
             <span>{range.to.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })}</span>
           </div>
+          {tournamentsLoading ? (
+            <p className="dash-surface-empty">Loading tournaments…</p>
+          ) : timelineItems.length === 0 ? (
+            <p className="dash-surface-empty">No completed tournaments in this period</p>
+          ) : (
           <div
             className="dash-timeline-track"
             style={{ height: `${Math.max(96, 56 + maxCluster * 22)}px` }}
@@ -245,10 +364,9 @@ export default function DashboardStubs({ range }: Props) {
             <div className="dash-timeline-line" />
             {timelineItems.map((t) => {
               const top = laneTopPercent(t.lane, t.clusterSize);
-              const isHovered =
-                hoveredTourney?.name === t.name && hoveredTourney?.date === t.date;
+              const isHovered = hoveredTourney?.logicalId === t.logicalId;
               return (
-                <div key={t.name + t.date} className="dash-timeline-node">
+                <div key={t.logicalId} className="dash-timeline-node">
                   {t.clusterSize > 1 && t.lane === 0 && (
                     <span
                       className="dash-timeline-cluster-badge"
@@ -294,9 +412,7 @@ export default function DashboardStubs({ range }: Props) {
               );
             })}
             {hoveredTourney && hoverSource === 'timeline' && (() => {
-              const item = timelineItems.find(
-                (t) => t.name === hoveredTourney.name && t.date === hoveredTourney.date
-              );
+              const item = timelineItems.find((t) => t.logicalId === hoveredTourney.logicalId);
               const top = item ? laneTopPercent(item.lane, item.clusterSize) : 50;
               return (
                 <div
@@ -318,6 +434,7 @@ export default function DashboardStubs({ range }: Props) {
               );
             })()}
           </div>
+          )}
           <div className="dash-timeline-legend">
             <span><i className="dash-timeline-dot dash-timeline-level-gs" /> Grand Slam</span>
             <span><i className="dash-timeline-dot dash-timeline-level-m1000" /> Masters</span>
@@ -327,10 +444,10 @@ export default function DashboardStubs({ range }: Props) {
 
           <div className="dash-map-section">
             <p className="dash-map-title">Host cities</p>
-            {worldGeo ? (
+            {worldGeo && !tournamentsLoading && mapTournaments.length > 0 ? (
               <TournamentWorldMap
-                tournaments={MOCK_TOURNAMENTS}
-                hovered={hoveredTourney}
+                tournaments={mapTournaments}
+                hovered={mapHovered}
                 showTooltip={hoverSource === 'map'}
                 onHover={(t) => {
                   setHoveredTourney(t);
@@ -338,11 +455,22 @@ export default function DashboardStubs({ range }: Props) {
                 }}
                 worldGeo={worldGeo}
               />
-            ) : (
+            ) : worldGeo && tournamentsLoading ? (
               <div className="dash-map-loading">
                 <div className="spinner" />
                 <span>Loading map…</span>
               </div>
+            ) : !worldGeo ? (
+              <div className="dash-map-loading">
+                <div className="spinner" />
+                <span>Loading map…</span>
+              </div>
+            ) : (
+              <p className="dash-surface-empty">
+                {!tournamentsLoading && tournaments.length > 0 && mapTournaments.length === 0
+                  ? 'No map coordinates for these events'
+                  : 'No host cities to display'}
+              </p>
             )}
           </div>
         </div>
@@ -352,12 +480,28 @@ export default function DashboardStubs({ range }: Props) {
         <h3 className="overview-section-title">Tournament titles</h3>
         <p className="dash-section-sub">Players ranked by titles won in the period</p>
         <div className="overview-card dash-titles-card">
+          {titlesLoading ? (
+            <p className="dash-surface-empty">Loading titles…</p>
+          ) : titleLeaders.length === 0 ? (
+            <p className="dash-surface-empty">No titles in this period</p>
+          ) : (
           <ul className="dash-titles-list">
-            {MOCK_TITLE_LEADERS.map((p, i) => (
-              <li key={p.name} className="dash-titles-row">
+            {titleLeaders.map((p, i) => {
+              const countryCode = iocToAlpha2(p.player_ioc);
+              return (
+              <li key={p.player_id ?? p.player_name} className="dash-titles-row">
                 <span className="dash-titles-rank">#{i + 1}</span>
-                <span className="dash-titles-flag">{p.flag}</span>
-                <span className="dash-titles-name">{p.name}</span>
+                <span className="dash-titles-flag">
+                  {countryCode ? (
+                    <ReactCountryFlag
+                      countryCode={countryCode}
+                      svg
+                      style={{ width: '1.25em', height: '1.25em' }}
+                      title={p.player_ioc ?? ''}
+                    />
+                  ) : null}
+                </span>
+                <span className="dash-titles-name">{p.player_name}</span>
                 <span className="dash-titles-bar-wrap">
                   <span
                     className="dash-titles-bar"
@@ -366,15 +510,22 @@ export default function DashboardStubs({ range }: Props) {
                 </span>
                 <span className="dash-titles-count">{p.titles}</span>
               </li>
-            ))}
+            );
+            })}
           </ul>
+          )}
         </div>
       </section>
 
       <section className="overview-section">
         <h3 className="overview-section-title">Period highlights</h3>
+        {highlightsLoading ? (
+          <p className="dash-surface-empty">Loading highlights…</p>
+        ) : highlights.length === 0 ? (
+          <p className="dash-surface-empty">No highlights for this period</p>
+        ) : (
         <div className="overview-extras-grid dash-insights-grid">
-          {MOCK_INSIGHTS.map((item) => (
+          {highlights.map((item) => (
             <div key={item.label} className="overview-extra-card dash-insight-card">
               <span className="overview-extra-icon">{item.icon}</span>
               <span className="overview-extra-value">{item.value}</span>
@@ -383,6 +534,7 @@ export default function DashboardStubs({ range }: Props) {
             </div>
           ))}
         </div>
+        )}
       </section>
     </div>
   );
