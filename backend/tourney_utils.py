@@ -36,10 +36,19 @@ ATP_500_CODES = frozenset({
     "744",   # Hamburg (legacy)
 })
 
+# ATP Finals (Tour Finals) — code 605/0605; 2023 source row is mislabeled as level A.
+ATP_FINALS_CODES = frozenset({"605", "0605"})
+
 
 def tourney_code(tourney_id: str) -> str:
     parts = tourney_id.split("-", 1)
     return parts[1] if len(parts) > 1 else tourney_id
+
+
+def is_atp_finals(tourney_id: str | None) -> bool:
+    if not tourney_id:
+        return False
+    return tourney_code(tourney_id) in ATP_FINALS_CODES
 
 
 def map_tourney_level(tourney_level: str, tourney_id: str) -> str:
@@ -49,6 +58,8 @@ def map_tourney_level(tourney_level: str, tourney_id: str) -> str:
         return "M1000"
     if tourney_level == "D":
         return "DC"
+    if tourney_level == "F" or is_atp_finals(tourney_id):
+        return "Finals"
     code = tourney_code(tourney_id)
     if code in ATP_500_CODES:
         return "500"

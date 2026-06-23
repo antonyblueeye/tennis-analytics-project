@@ -1,12 +1,28 @@
 # backend/main.py
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
-from routers import players, matches, dashboard
+from routers import players, matches, dashboard, h2h, hypotheses
+from database import get_connection
+from db_indexes import ensure_rankings_indexes
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        with get_connection() as conn:
+            ensure_rankings_indexes(conn)
+        hypotheses._load_early_success()
+    except Exception:
+        pass
+    yield
+
 
 app = FastAPI(
     title="Tennis Analytics API",
     description="REST API для поиска и анализа теннисных данных",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS — разрешаем запросы от фронтенда
@@ -21,6 +37,8 @@ app.add_middleware(
 app.include_router(players.router)
 app.include_router(matches.router)
 app.include_router(dashboard.router)
+app.include_router(h2h.router)
+app.include_router(hypotheses.router)
 
 
 @app.get("/health", tags=["system"])

@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -18,14 +18,24 @@ import {
   Cell,
 } from 'recharts';
 
-const COHORT_DATA = [
-  { age: '≤17', top10Prob: 42, eliteYears: 9.2, n: 38 },
-  { age: '18', top10Prob: 38, eliteYears: 8.1, n: 64 },
-  { age: '19', top10Prob: 31, eliteYears: 6.8, n: 89 },
-  { age: '20', top10Prob: 24, eliteYears: 5.4, n: 112 },
-  { age: '21', top10Prob: 18, eliteYears: 4.1, n: 98 },
-  { age: '22+', top10Prob: 9, eliteYears: 2.6, n: 156 },
-];
+const API = 'http://127.0.0.1:8000';
+
+type CohortRow = { age: string; top10Prob: number; eliteYears: number; n: number };
+type EarlySuccessData = {
+  cohorts: CohortRow[];
+  kpis: {
+    medianAgeTop10: number;
+    medianAgeNonTop10: number;
+    pTop10By19: number;
+    pTop10Late: number;
+    top10Ratio: number | null;
+    avgYearsEarly: number;
+    sampleSize: number;
+  };
+  period: string;
+  rankingsThrough?: number;
+  sampleDefinition?: string;
+};
 
 const PEAK_AGE_DATA = [
   { milestone: 'Top 100', median: 20.1, p25: 18.4, p75: 21.8 },
@@ -107,72 +117,165 @@ function HypothesisHeader({
   );
 }
 
+function EarlySuccessHypothesis() {
+  const [data, setData] = useState<EarlySuccessData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    fetch(`${API}/api/hypotheses/early-success`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error((body as { detail?: string }).detail ?? `HTTP ${res.status}`);
+        }
+        return res.json() as Promise<EarlySuccessData>;
+      })
+      .then((json) => {
+        if (!cancelled) setData(json);
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const cohorts = data?.cohorts ?? [];
+  const kpis = data?.kpis;
+  const maxProb = Math.max(10, ...cohorts.map((c) => c.top10Prob));
+  const maxYears = Math.max(5, ...cohorts.map((c) => c.eliteYears));
+
+  return (
+    <section className="hyp-block overview-card">
+      <HypothesisHeader rank="🥇" title="Early success → career trajectory" status="supported">
+        The earlier a player enters the Top-100, the higher the probability of reaching the Top-10
+        and the longer they tend to stay in the elite tier.
+      </HypothesisHeader>
+
+      {loading && <p className="overview-stub-badge">Loading live data…</p>}
+      {error && (
+        <p className="overview-stub-badge" style={{ color: 'var(--danger, #ef4444)' }}>
+          Failed to load: {error}
+        </p>
+      )}
+
+      {kpis && (
+        <>
+          <div className="hyp-kpi-row">
+            <Kpi
+              label="Median age at Top-100 (Top-10 achievers)"
+              value={`${kpis.medianAgeTop10} yrs`}
+              sub={`vs ${kpis.medianAgeNonTop10} yrs for non–Top-10`}
+            />
+            <Kpi
+              label="P(Top-10 | Top-100 before 20)"
+              value={`${kpis.pTop10By19}%`}
+              sub={
+                kpis.top10Ratio != null
+                  ? `${kpis.top10Ratio}× vs entry at 22+ (${kpis.pTop10Late}%)`
+                  : undefined
+              }
+            />
+            <Kpi
+              label="Avg years in Top-100"
+              value={`${kpis.avgYearsEarly} yrs`}
+              sub="early cohort (before 20)"
+            />
+            <Kpi
+              label="Sample size"
+              value={`${kpis.sampleSize} players`}
+              sub={
+                data?.sampleDefinition
+                  ? `${data.sampleDefinition} · through ${data.period}`
+                  : `ATP ${data?.period ?? '2000–present'}`
+              }
+            />
+          </div>
+
+          <div className="hyp-charts-grid">
+            <div className="hyp-chart-card">
+              <p className="hyp-chart-title">Top-10 probability by age at first Top-100 entry</p>
+              <p className="hyp-chart-sub">Share of cohort that ever reached Top-10 · n in tooltip</p>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={cohorts} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="age" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} unit="%" domain={[0, Math.ceil(maxProb / 10) * 10]} />
+                  <Tooltip
+                    formatter={(value, _name, props) => [
+                      `${value}%`,
+                      `P(Top-10) · n=${(props.payload as CohortRow).n}`,
+                    ]}
+                  />
+                  <Bar dataKey="top10Prob" name="P(Top-10)" radius={[4, 4, 0, 0]}>
+                    {cohorts.map((_, i) => (
+                      <Cell key={i} fill={COHORT_COLORS[i] ?? '#059669'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="hyp-chart-card">
+              <p className="hyp-chart-title">Years spent in Top-100 by entry-age cohort</p>
+              <p className="hyp-chart-sub">Ranking weeks in Top-100 ÷ 52</p>
+              <ResponsiveContainer width="100%" height={240}>
+                <AreaChart data={cohorts} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="age" tick={{ fontSize: 11 }} />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    unit=" yrs"
+                    domain={[0, Math.ceil(maxYears / 2) * 2]}
+                  />
+                  <Tooltip
+                    formatter={(value, _name, props) => [
+                      `${value} yrs`,
+                      `Avg tenure · n=${(props.payload as CohortRow).n}`,
+                    ]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="eliteYears"
+                    stroke="#059669"
+                    fill="rgba(5, 150, 105, 0.15)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="hyp-method">
+            <strong>Method:</strong> from <code>atp_rankings</code> through the latest snapshot (
+            {data?.rankingsThrough
+              ? `${String(data.rankingsThrough).slice(0, 4)}-${String(data.rankingsThrough).slice(4, 6)}-${String(data.rankingsThrough).slice(6, 8)}`
+              : 'latest'}
+            ) — first-ever Top-100 week per player (full ranking history), debuts from 2000 only;
+            joined with <code>atp_players.dob</code> for entry age; tenure = Top-100 weeks ÷ 52.
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function HypothesisStubs() {
   return (
     <div className="hyp-stubs">
-      <p className="overview-stub-badge">Preview · sample data · exploratory analysis</p>
+      <EarlySuccessHypothesis />
 
-      {/* ── H1: Early success ── */}
-      <section className="hyp-block overview-card">
-        <HypothesisHeader rank="🥇" title="Early success → career trajectory" status="testing">
-          The earlier a player enters the Top-100, the higher the probability of reaching the Top-10
-          and the longer they tend to stay in the elite tier.
-        </HypothesisHeader>
-
-        <div className="hyp-kpi-row">
-          <Kpi label="Median age at Top-100 (Top-10 achievers)" value="18.4 yrs" sub="vs 20.9 yrs for non–Top-10" />
-          <Kpi label="P(Top-10 | Top-100 by 19)" value="34%" sub="2.4× vs late bloomers" />
-          <Kpi label="Avg years in Top-100" value="7.8 yrs" sub="early cohort (≤19)" />
-          <Kpi label="Sample size" value="557 players" sub="ATP 2000–2025" />
-        </div>
-
-        <div className="hyp-charts-grid">
-          <div className="hyp-chart-card">
-            <p className="hyp-chart-title">Top-10 probability by age at first Top-100 entry</p>
-            <p className="hyp-chart-sub">Cohort analysis · Kaplan-Meier style preview</p>
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={COHORT_DATA} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="age" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} unit="%" domain={[0, 50]} />
-                <Tooltip />
-                <Bar dataKey="top10Prob" name="top10Prob" radius={[4, 4, 0, 0]}>
-                  {COHORT_DATA.map((_, i) => (
-                    <Cell key={i} fill={COHORT_COLORS[i] ?? '#059669'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="hyp-chart-card">
-            <p className="hyp-chart-title">Years spent in Top-100 by entry-age cohort</p>
-            <p className="hyp-chart-sub">Elite tenure · expected survival curve</p>
-            <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={COHORT_DATA} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="age" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} unit=" yrs" domain={[0, 12]} />
-                <Tooltip />
-                <Area
-                  type="monotone"
-                  dataKey="eliteYears"
-                  stroke="#059669"
-                  fill="rgba(5, 150, 105, 0.15)"
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="hyp-method">
-          <strong>Planned method:</strong> join <code>atp_rankings</code> first Top-100 date per player →
-          cohort by age → logistic regression for P(Top-10) and survival analysis for elite tenure.
-        </div>
-      </section>
-
-      {/* ── H2: Peak career age ── */}
+      <p className="overview-stub-badge">Preview · sample data · hypotheses 2–3</p>
       <section className="hyp-block overview-card">
         <HypothesisHeader rank="🥈" title="Peak career age & milestone timing" status="draft">
           Career milestones cluster at predictable ages — when do players typically break into the Top-100,
