@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 
 const navItems = [
   { icon: '📊', label: 'Dashboard',    href: '/' },
+  { icon: '🔬', label: 'Hypotheses',   href: '/hypotheses' },
   { icon: '👥', label: 'Players',      href: '/players' },
   { icon: '🎾', label: 'Matches',      href: '/matches' },
   { icon: '⚔️', label: 'Head-to-Head', href: '/head-to-head' },
@@ -27,7 +28,10 @@ export default function Sidebar() {
       {/* Nav Items */}
       <nav className="sidebar-nav" aria-label="Sidebar navigation">
         {navItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive =
+            item.href === '/'
+              ? pathname === '/'
+              : pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}
