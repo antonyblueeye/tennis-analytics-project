@@ -32,9 +32,9 @@ WITH player_dob AS (
 rank_milestones AS (
     SELECT
         ROUND(r.player::numeric)::bigint AS player_id,
-        MIN(r.ranking_date) FILTER (WHERE r.rank <= 100) AS first_top100_date,
-        MIN(r.ranking_date) FILTER (WHERE r.rank <= 10) AS first_top10_date,
-        MIN(r.ranking_date) FILTER (WHERE r.rank = 1) AS first_num1_date
+        MIN(ROUND(r.ranking_date::numeric)::bigint) FILTER (WHERE ROUND(r.rank::numeric) <= 100) AS first_top100_date,
+        MIN(ROUND(r.ranking_date::numeric)::bigint) FILTER (WHERE ROUND(r.rank::numeric) <= 10) AS first_top10_date,
+        MIN(ROUND(r.ranking_date::numeric)::bigint) FILTER (WHERE ROUND(r.rank::numeric) = 1) AS first_num1_date
     FROM atp_rankings r
     GROUP BY ROUND(r.player::numeric)::bigint
 ),
@@ -52,15 +52,15 @@ first_slams AS (
 )
 SELECT
     CASE
-        WHEN rm.first_top100_date::bigint >= 20000101 THEN
+        WHEN rm.first_top100_date >= 20000101 THEN
             (to_date(rm.first_top100_date::text, 'YYYYMMDD') - d.birth_date) / 365.25
     END AS age_top100,
     CASE
-        WHEN rm.first_top10_date::bigint >= 20000101 THEN
+        WHEN rm.first_top10_date >= 20000101 THEN
             (to_date(rm.first_top10_date::text, 'YYYYMMDD') - d.birth_date) / 365.25
     END AS age_top10,
     CASE
-        WHEN rm.first_num1_date::bigint >= 20000101 THEN
+        WHEN rm.first_num1_date >= 20000101 THEN
             (to_date(rm.first_num1_date::text, 'YYYYMMDD') - d.birth_date) / 365.25
     END AS age_num1,
     fs.age_at_first_slam AS age_slam

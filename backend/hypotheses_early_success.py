@@ -7,9 +7,9 @@ from typing import Any
 
 PLAYER_STATS_SQL = """
 WITH ranking_bounds AS (
-    SELECT MAX(ranking_date)::bigint AS max_date
+    SELECT MAX(ROUND(ranking_date::numeric)::bigint) AS max_date
     FROM atp_rankings
-    WHERE ranking_date::bigint >= 20000101
+    WHERE ROUND(ranking_date::numeric)::bigint >= 20000101
 ),
 player_dob AS (
     SELECT
@@ -21,21 +21,21 @@ player_dob AS (
 player_first AS (
     SELECT
         ROUND(r.player::numeric)::bigint AS player_id,
-        MIN(r.ranking_date) FILTER (WHERE r.rank <= 100) AS first_top100_date
+        MIN(ROUND(r.ranking_date::numeric)::bigint) FILTER (WHERE ROUND(r.rank::numeric) <= 100) AS first_top100_date
     FROM atp_rankings r
     GROUP BY ROUND(r.player::numeric)::bigint
-    HAVING MIN(r.ranking_date) FILTER (WHERE r.rank <= 100) IS NOT NULL
-       AND MIN(r.ranking_date::bigint) FILTER (WHERE r.rank <= 100) >= 20000101
+    HAVING MIN(ROUND(r.ranking_date::numeric)::bigint) FILTER (WHERE ROUND(r.rank::numeric) <= 100) IS NOT NULL
+       AND MIN(ROUND(r.ranking_date::numeric)::bigint) FILTER (WHERE ROUND(r.rank::numeric) <= 100) >= 20000101
 ),
 player_period AS (
     SELECT
         ROUND(r.player::numeric)::bigint AS player_id,
-        BOOL_OR(r.rank <= 10) AS reached_top10,
-        COUNT(*) FILTER (WHERE r.rank <= 100)::float / 52.0 AS years_in_top100
+        BOOL_OR(ROUND(r.rank::numeric) <= 10) AS reached_top10,
+        COUNT(*) FILTER (WHERE ROUND(r.rank::numeric) <= 100)::float / 52.0 AS years_in_top100
     FROM atp_rankings r
     INNER JOIN player_first f ON f.player_id = ROUND(r.player::numeric)::bigint
     CROSS JOIN ranking_bounds b
-    WHERE r.ranking_date::bigint BETWEEN 20000101 AND b.max_date
+    WHERE ROUND(r.ranking_date::numeric)::bigint BETWEEN 20000101 AND b.max_date
     GROUP BY ROUND(r.player::numeric)::bigint
 )
 SELECT

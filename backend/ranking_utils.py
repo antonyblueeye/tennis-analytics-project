@@ -3,7 +3,7 @@
 
 
 def get_latest_snapshot_date(cur) -> int | None:
-    cur.execute("SELECT MAX(ranking_date)::bigint AS d FROM atp_rankings")
+    cur.execute("SELECT MAX(ROUND(ranking_date::numeric)::bigint) AS d FROM atp_rankings")
     row = cur.fetchone()
     return int(row["d"]) if row and row["d"] is not None else None
 
@@ -30,9 +30,9 @@ def get_player_ranking_status(cur, player_id: str | int) -> dict:
         SELECT
             ROUND(rank::numeric)::int AS rank,
             ROUND(points::numeric)::int AS points,
-            ranking_date::bigint AS ranking_date
+            ROUND(ranking_date::numeric)::bigint AS ranking_date
         FROM atp_rankings
-        WHERE player::bigint = %s AND ranking_date::bigint = %s
+        WHERE ROUND(player::numeric)::bigint = %s AND ROUND(ranking_date::numeric)::bigint = %s
         """,
         (pid, latest_date),
     )
@@ -51,10 +51,10 @@ def get_player_ranking_status(cur, player_id: str | int) -> dict:
         """
         SELECT
             ROUND(rank::numeric)::int AS rank,
-            ranking_date::bigint AS ranking_date
+            ROUND(ranking_date::numeric)::bigint AS ranking_date
         FROM atp_rankings
-        WHERE player::bigint = %s
-        ORDER BY ranking_date DESC
+        WHERE ROUND(player::numeric)::bigint = %s
+        ORDER BY ROUND(ranking_date::numeric)::bigint DESC
         LIMIT 1
         """,
         (pid,),

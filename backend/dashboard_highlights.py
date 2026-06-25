@@ -121,7 +121,7 @@ def get_highlights(from_date: date, to_date: date) -> list[dict]:
             SELECT
                 player::bigint AS player_id,
                 rank AS rank_val,
-                ranking_date::bigint AS rd
+                ROUND(ranking_date::numeric)::bigint AS rd
             FROM atp_rankings
             WHERE TO_DATE(ranking_date::text, 'YYYYMMDD') >= %s
               AND TO_DATE(ranking_date::text, 'YYYYMMDD') <= %s
