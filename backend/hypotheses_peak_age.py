@@ -52,15 +52,15 @@ first_slams AS (
 )
 SELECT
     CASE
-        WHEN rm.first_top100_date >= 20000101 THEN
+        WHEN rm.first_top100_date::bigint >= 20000101 THEN
             (to_date(rm.first_top100_date::text, 'YYYYMMDD') - d.birth_date) / 365.25
     END AS age_top100,
     CASE
-        WHEN rm.first_top10_date >= 20000101 THEN
+        WHEN rm.first_top10_date::bigint >= 20000101 THEN
             (to_date(rm.first_top10_date::text, 'YYYYMMDD') - d.birth_date) / 365.25
     END AS age_top10,
     CASE
-        WHEN rm.first_num1_date >= 20000101 THEN
+        WHEN rm.first_num1_date::bigint >= 20000101 THEN
             (to_date(rm.first_num1_date::text, 'YYYYMMDD') - d.birth_date) / 365.25
     END AS age_num1,
     fs.age_at_first_slam AS age_slam

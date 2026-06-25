@@ -32,7 +32,7 @@ def get_player_ranking_status(cur, player_id: str | int) -> dict:
             ROUND(points::numeric)::int AS points,
             ranking_date::bigint AS ranking_date
         FROM atp_rankings
-        WHERE player::bigint = %s AND ranking_date = %s
+        WHERE player::bigint = %s AND ranking_date::bigint = %s
         """,
         (pid, latest_date),
     )

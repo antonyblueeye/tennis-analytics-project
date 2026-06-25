@@ -9,7 +9,7 @@ PLAYER_STATS_SQL = """
 WITH ranking_bounds AS (
     SELECT MAX(ranking_date)::bigint AS max_date
     FROM atp_rankings
-    WHERE ranking_date >= 20000101
+    WHERE ranking_date::bigint >= 20000101
 ),
 player_dob AS (
     SELECT
@@ -25,7 +25,7 @@ player_first AS (
     FROM atp_rankings r
     GROUP BY ROUND(r.player::numeric)::bigint
     HAVING MIN(r.ranking_date) FILTER (WHERE r.rank <= 100) IS NOT NULL
-       AND MIN(r.ranking_date) FILTER (WHERE r.rank <= 100) >= 20000101
+       AND MIN(r.ranking_date::bigint) FILTER (WHERE r.rank <= 100) >= 20000101
 ),
 player_period AS (
     SELECT
@@ -35,7 +35,7 @@ player_period AS (
     FROM atp_rankings r
     INNER JOIN player_first f ON f.player_id = ROUND(r.player::numeric)::bigint
     CROSS JOIN ranking_bounds b
-    WHERE r.ranking_date BETWEEN 20000101 AND b.max_date
+    WHERE r.ranking_date::bigint BETWEEN 20000101 AND b.max_date
     GROUP BY ROUND(r.player::numeric)::bigint
 )
 SELECT
