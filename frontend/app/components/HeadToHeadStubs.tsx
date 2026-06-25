@@ -21,7 +21,7 @@ import type { PickedPlayer } from './PlayerSearchPicker';
 
 const COLOR_A = '#22c55e';
 const COLOR_B = '#3b82f6';
-const API = 'http://127.0.0.1:8000';
+import { API_BASE } from '@/lib/api';
 
 type MatchupRow = { label: string; wins: number; losses: number; pct: number };
 type ProfileSide = {
@@ -207,7 +207,7 @@ export default function HeadToHeadStubs({ playerA, playerB }: Props) {
     setLoading(true);
     setError(null);
 
-    fetch(`${API}/api/h2h?player_a=${playerA.player_id}&player_b=${playerB.player_id}`)
+    fetch(`${API_BASE}/api/h2h?player_a=${playerA.player_id}&player_b=${playerB.player_id}`)
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));

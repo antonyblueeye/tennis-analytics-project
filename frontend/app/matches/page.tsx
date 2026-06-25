@@ -5,6 +5,7 @@ import Link from 'next/link';
 import ReactCountryFlag from 'react-country-flag';
 import countries from 'i18n-iso-countries';
 import enLocale from 'i18n-iso-countries/langs/en.json';
+import { API_BASE } from '@/lib/api';
 import { iocToAlpha2 } from '../lib/ioc';
 
 countries.registerLocale(enLocale);
@@ -288,7 +289,7 @@ export default function MatchesPage() {
       if (appliedTournament.trim()) params.set('tournament', appliedTournament.trim());
       if (appliedPlayer.trim()) params.set('player', appliedPlayer.trim());
 
-      const res = await fetch(`http://127.0.0.1:8000/api/matches?${params}`);
+      const res = await fetch(`${API_BASE}/api/matches?${params}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const json = await res.json();
       setMatches(json.results || []);

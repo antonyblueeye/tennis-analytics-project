@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import ReactCountryFlag from 'react-country-flag';
 import countries from 'i18n-iso-countries';
 import enLocale from 'i18n-iso-countries/langs/en.json';
+import { API_BASE } from '@/lib/api';
 import { iocToAlpha2 } from '../lib/ioc';
 
 countries.registerLocale(enLocale);
@@ -51,7 +52,7 @@ export default function PlayerSearchPicker({
       setLoading(true);
       try {
         const res = await fetch(
-          `http://127.0.0.1:8000/api/players/search?q=${encodeURIComponent(query.trim())}`
+          `${API_BASE}/api/players/search?q=${encodeURIComponent(query.trim())}`
         );
         const data = await res.json();
         const list: PickedPlayer[] = (data.results || []).filter(

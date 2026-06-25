@@ -1,19 +1,12 @@
 import pandas as pd
-import psycopg2
 from psycopg2.extras import execute_values
 import os
 import glob
 import sys
 
-# --- НАСТРОЙКИ ---
-DB_NAME = "tennis_db"
-DB_USER = "postgres"
-DB_PASSWORD = "8876700"
-DB_HOST = "127.0.0.1"
-DB_PORT = "5432"
+from db_config import connect
 
 TABLE_NAME = "atp_matches"
-# --- КОНЕЦ НАСТРОЕК ---
 
 # Папка с ATP данными
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -46,17 +39,15 @@ connection = None
 try:
 
     # Подключение к БД
-    connection = psycopg2.connect(
-        database=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        host=DB_HOST,
-        port=DB_PORT
-    )
+    connection = connect()
 
     cursor = connection.cursor()
 
     print("Подключение к БД успешно")
+
+    cursor.execute(f"DROP TABLE IF EXISTS {TABLE_NAME} CASCADE")
+    connection.commit()
+    print(f"Таблица {TABLE_NAME} удалена (если существовала)")
 
     table_created = False
     total_rows = 0
@@ -85,7 +76,7 @@ try:
             )
 
             create_query = f"""
-            CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
+            CREATE TABLE {TABLE_NAME} (
                 id SERIAL PRIMARY KEY,
                 {columns_with_types}
             );

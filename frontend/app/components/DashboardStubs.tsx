@@ -13,6 +13,7 @@ import type { DateRange } from './DateRangePicker';
 import TournamentWorldMap, { type GeoCollection } from './TournamentWorldMap';
 import TournamentTooltip from './TournamentTooltip';
 import { iocToAlpha2 } from '../lib/ioc';
+import { API_BASE } from '@/lib/api';
 import {
   enrichTournament,
   hasMapLocation,
@@ -166,7 +167,7 @@ export default function DashboardStubs({ range }: Props) {
 
     setSummaryLoading(true);
     fetch(
-      `http://127.0.0.1:8000/api/dashboard/summary?from=${from}&to=${to}`,
+      `${API_BASE}/api/dashboard/summary?from=${from}&to=${to}`,
       { signal: controller.signal }
     )
       .then((res) => {
@@ -197,7 +198,7 @@ export default function DashboardStubs({ range }: Props) {
     setHighlightsLoading(true);
 
     fetch(
-      `http://127.0.0.1:8000/api/dashboard/tournaments?from=${from}&to=${to}`,
+      `${API_BASE}/api/dashboard/tournaments?from=${from}&to=${to}`,
       { signal: controller.signal }
     )
       .then((res) => {
@@ -218,7 +219,7 @@ export default function DashboardStubs({ range }: Props) {
       });
 
     fetch(
-      `http://127.0.0.1:8000/api/dashboard/titles?from=${from}&to=${to}&limit=15`,
+      `${API_BASE}/api/dashboard/titles?from=${from}&to=${to}&limit=15`,
       { signal: controller.signal }
     )
       .then((res) => {
@@ -237,7 +238,7 @@ export default function DashboardStubs({ range }: Props) {
       });
 
     fetch(
-      `http://127.0.0.1:8000/api/dashboard/highlights?from=${from}&to=${to}`,
+      `${API_BASE}/api/dashboard/highlights?from=${from}&to=${to}`,
       { signal: controller.signal }
     )
       .then((res) => {

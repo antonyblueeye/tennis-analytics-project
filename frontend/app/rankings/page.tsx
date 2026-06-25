@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { API_BASE } from '@/lib/api';
 import { getPlayerImage } from '../lib/wiki';
 
 type RankingPlayer = {
@@ -44,7 +45,7 @@ export default function RankingsPage() {
   useEffect(() => {
     async function fetchRankings() {
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/players/rankings/top?limit=100');
+        const res = await fetch(`${API_BASE}/api/players/rankings/top?limit=100`);
         if (!res.ok) throw new Error('Failed to fetch rankings');
         const json = await res.json();
         const results: RankingPlayer[] = json?.results ?? [];

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { API_BASE } from '@/lib/api';
+
 export interface TournamentMatch {
   round: string;
   opponent: string;
@@ -121,7 +123,7 @@ export default function TournamentResultPopover({
       if (tourneyName) params.set('tourney_name', tourneyName);
 
       const res = await fetch(
-        `http://127.0.0.1:8000/api/players/${playerId}/tournament-matches?${params}`
+        `${API_BASE}/api/players/${playerId}/tournament-matches?${params}`
       );
       if (!res.ok) throw new Error('fetch failed');
       const json: TournamentMatchesResponse = await res.json();

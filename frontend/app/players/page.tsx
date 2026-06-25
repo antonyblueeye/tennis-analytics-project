@@ -5,6 +5,7 @@ import Link from 'next/link';
 import ReactCountryFlag from 'react-country-flag';
 import countries from 'i18n-iso-countries';
 import enLocale from 'i18n-iso-countries/langs/en.json';
+import { API_BASE } from '@/lib/api';
 import { iocToAlpha2, iocToName } from '../lib/ioc';
 import { getPlayerImage } from '../lib/wiki';
 
@@ -64,7 +65,7 @@ export default function PlayersPage() {
   useEffect(() => {
     async function loadFeatured() {
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/players/rankings/top?limit=100');
+        const res = await fetch(`${API_BASE}/api/players/rankings/top?limit=100`);
         if (!res.ok) throw new Error('Failed to fetch top rankings');
         const data = await res.json();
         const top: TopPlayer[] = data.results || [];
@@ -93,7 +94,7 @@ export default function PlayersPage() {
     setLoading(true);
     setSearched(true);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/players/search?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`${API_BASE}/api/players/search?q=${encodeURIComponent(query)}`);
       const data = await res.json();
       const results: Player[] = data.results || [];
       setPlayers(results);

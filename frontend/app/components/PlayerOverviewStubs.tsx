@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-const API = 'http://127.0.0.1:8000';
+import { API_BASE } from '@/lib/api';
 
 type LastMatch = {
   date: string;
@@ -148,7 +148,7 @@ export default function PlayerOverviewStubs({ playerId }: Props) {
     setLoading(true);
     setError(null);
 
-    fetch(`${API}/api/players/${playerId}/overview`)
+    fetch(`${API_BASE}/api/players/${playerId}/overview`)
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));

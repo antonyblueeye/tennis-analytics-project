@@ -1,12 +1,7 @@
 import pandas as pd
-import psycopg2
 from psycopg2.extras import execute_values
 
-DB_NAME = "tennis_db"
-DB_USER = "postgres"
-DB_PASSWORD = "8876700"
-DB_HOST = "127.0.0.1"
-DB_PORT = "5432"
+from db_config import connect
 
 SOURCE_TABLE = "atp_matches"
 TARGET_TABLE = "atp_player_matches"
@@ -53,13 +48,7 @@ def save_dataframe(cursor, connection, df: pd.DataFrame, table_name: str) -> Non
 connection = None
 
 try:
-    connection = psycopg2.connect(
-        database=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        host=DB_HOST,
-        port=DB_PORT,
-    )
+    connection = connect()
     cursor = connection.cursor()
 
     print("Loading matches...")

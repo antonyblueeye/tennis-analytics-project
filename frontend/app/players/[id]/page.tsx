@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import ReactCountryFlag from 'react-country-flag';
 import countries from 'i18n-iso-countries';
 import enLocale from 'i18n-iso-countries/langs/en.json';
+import { API_BASE } from '@/lib/api';
 import { iocToAlpha2, iocToName } from '../../lib/ioc';
 import { getPlayerImage } from '../../lib/wiki';
 import { formatDobWithAge } from '../../lib/player';
@@ -330,13 +331,13 @@ export default function PlayerProfilePage() {
 
     async function fetchPlayer() {
       try {
-        const res = await fetch(`http://127.0.0.1:8000/api/players/${playerId}`);
+        const res = await fetch(`${API_BASE}/api/players/${playerId}`);
         if (!res.ok) throw new Error('Player not found');
         const data: Player = await res.json();
         setPlayer(data);
 
         const rankingRes = await fetch(
-          `http://127.0.0.1:8000/api/players/${playerId}/rankings-history`
+          `${API_BASE}/api/players/${playerId}/rankings-history`
         );
         if (rankingRes.ok) {
           const rankingData = await rankingRes.json();
@@ -350,7 +351,7 @@ export default function PlayerProfilePage() {
         }
 
         const slamRes = await fetch(
-          `http://127.0.0.1:8000/api/players/${playerId}/grand-slams`
+          `${API_BASE}/api/players/${playerId}/grand-slams`
         );
         if (slamRes.ok) {
           const slamData = await slamRes.json();
@@ -358,7 +359,7 @@ export default function PlayerProfilePage() {
         }
 
         const mastersRes = await fetch(
-          `http://127.0.0.1:8000/api/players/${playerId}/masters`
+          `${API_BASE}/api/players/${playerId}/masters`
         );
         if (mastersRes.ok) {
           const mastersData = await mastersRes.json();

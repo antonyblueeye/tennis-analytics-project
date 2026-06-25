@@ -18,7 +18,7 @@ import {
   Cell,
 } from 'recharts';
 
-const API = 'http://127.0.0.1:8000';
+import { API_BASE } from '@/lib/api';
 
 type CohortRow = { age: string; top10Prob: number; eliteYears: number; n: number };
 type EarlySuccessData = {
@@ -130,7 +130,7 @@ function EarlySuccessHypothesis() {
     setLoading(true);
     setError(null);
 
-    fetch(`${API}/api/hypotheses/early-success`)
+    fetch(`${API_BASE}/api/hypotheses/early-success`)
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -283,7 +283,7 @@ function PeakAgeHypothesis() {
     setLoading(true);
     setError(null);
 
-    fetch(`${API}/api/hypotheses/peak-age`)
+    fetch(`${API_BASE}/api/hypotheses/peak-age`)
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -414,7 +414,7 @@ function ServeSaturationHypothesis() {
     setLoading(true);
     setError(null);
 
-    fetch(`${API}/api/hypotheses/serve-saturation`)
+    fetch(`${API_BASE}/api/hypotheses/serve-saturation`)
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));

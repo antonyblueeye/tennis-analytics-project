@@ -1,20 +1,12 @@
 # scripts/import_tennis_data.py
 
 import pandas as pd
-import psycopg2
 import os
 import sys
 
-# --- НАСТРОЙКИ (Обязательно подставь свои данные!) ---
-# Параметры подключения к БД
-DB_NAME = "tennis_db"        # Имя твоей базы данных
-DB_USER = "postgres"        # Твой пользователь
-DB_PASSWORD = "8876700"    # Твой пароль
-DB_HOST = "127.0.0.1"       # Хост
-DB_PORT = "5432"            # Порт
+from db_config import connect
 
 TABLE_NAME = "atp_players"
-# --- КОНЕЦ НАСТРОЕК ---
 
 # 1. Определяем путь к CSV автоматически
 # Считаем, что CSV лежит в ../data/tennis_atp-master/atp_players.csv относительно скрипта
@@ -39,22 +31,20 @@ try:
     print(f"Первые 2 строки:\n{dataframe.head(2)}")
 
     # 4. Подключаемся к БД
-    connection = psycopg2.connect(
-        database=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        host=DB_HOST,
-        port=DB_PORT
-    )
+    connection = connect()
     connection.autocommit = True
     cursor = connection.cursor()
     print("Подключение к БД успешно")
+
+    # Пересоздаём таблицу — повторный запуск не создаёт дубликаты
+    cursor.execute(f"DROP TABLE IF EXISTS {TABLE_NAME} CASCADE")
+    print(f"Таблица {TABLE_NAME} удалена (если существовала)")
 
     # 5. Создаём таблицу
     columns = dataframe.columns
     columns_with_types = ", ".join([f'"{col}" VARCHAR' for col in columns])
     create_query = f'''
-    CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
+    CREATE TABLE {TABLE_NAME} (
         id SERIAL PRIMARY KEY,
         {columns_with_types}
     );
