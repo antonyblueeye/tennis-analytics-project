@@ -29,15 +29,40 @@ Root Directory: `frontend`
 NEXT_PUBLIC_API_URL=https://YOUR-BACKEND.up.railway.app
 ```
 
-Must start with `https://` (or `http://` for local). Without a protocol the build/runtime will fail or misroute requests.
+Must start with `https://` (or `http://` for local). Example:
+
+```text
+NEXT_PUBLIC_API_URL=https://tennis-analytics-project-production.up.railway.app
+```
 
 ## 3. Railway backend variables
 
 Root Directory: `backend` · Builder: Dockerfile
 
 ```text
-DATABASE_URL=...   (from Postgres)
+DATABASE_URL=...   (from Postgres — see below)
 ALLOWED_ORIGINS=http://localhost:3000,https://tennis-analytics-project.vercel.app
+```
+
+### DATABASE_URL must work from the backend container
+
+If API returns 500 with:
+
+```text
+could not translate host name "postgres.railway.internal" to address
+```
+
+the backend **cannot reach Postgres**. Common causes:
+
+1. Postgres and backend in **different Railway projects** → use **Public** Postgres URL in backend `DATABASE_URL`
+2. `DATABASE_URL` pasted manually with internal host → in Postgres service: **Connect → Public URL**, copy full `postgresql://...` into backend Variables
+3. Or in the **same project**: backend → Variables → **Add Reference** → Postgres → `DATABASE_URL`
+
+After changing `DATABASE_URL`, **Redeploy backend**, then verify:
+
+```text
+https://tennis-analytics-project-production.up.railway.app/api/players/rankings/top?limit=2
+→ JSON (not 500)
 ```
 
 ## 4. Quick test from browser
