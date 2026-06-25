@@ -527,7 +527,7 @@ export default function PlayerProfilePage() {
                 </div>
               </div>
 
-              <PlayerOverviewStubs />
+              <PlayerOverviewStubs playerId={playerId} />
 
               {rankingHistory.length > 0 && (
                 <div className="player-overview-chart">

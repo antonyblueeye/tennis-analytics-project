@@ -10,6 +10,7 @@ from tournament_calendar import (
 )
 
 from score_utils import player_perspective_score
+from player_overview import OVERVIEW_COLUMNS, build_player_overview
 
 router = APIRouter(prefix="/api/players", tags=["players"])
 
@@ -242,6 +243,32 @@ def get_rankings_history(player_id: int):
             status_code=500,
             detail=f"Ошибка базы данных: {e}"
         )
+
+
+@router.get("/{player_id}/overview")
+def get_player_overview(player_id: int):
+    """Career overview stats for player profile tab."""
+    sql = f"""
+        SELECT {OVERVIEW_COLUMNS}
+        FROM atp_player_matches
+        WHERE player_id = %s
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM atp_players WHERE player_id = %s",
+                    (str(player_id),),
+                )
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Игрок не найден")
+                cur.execute(sql, (str(player_id),))
+                rows = [dict(r) for r in cur.fetchall()]
+        return build_player_overview(rows)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}") from e
 
 
 @router.get("/{player_id}/grand-slams")
