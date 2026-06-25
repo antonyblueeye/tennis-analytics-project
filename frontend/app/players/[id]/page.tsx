@@ -42,6 +42,13 @@ interface RankingHistory {
   points: number;
 }
 
+interface RankingMeta {
+  rankStatus: 'active' | 'inactive';
+  currentRank: number | null;
+  lastRank: number | null;
+  lastRankDate: number | null;
+}
+
 interface GrandSlamResult {
   year: number;
   slam: SlamKey;
@@ -309,6 +316,7 @@ export default function PlayerProfilePage() {
   const [error, setError] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [rankingHistory, setRankingHistory] = useState<RankingHistory[]>([]);
+  const [rankingMeta, setRankingMeta] = useState<RankingMeta | null>(null);
   const [grandSlamData, setGrandSlamData] = useState<GrandSlamResult[]>([]);
   const [mastersGroups, setMastersGroups] = useState<MastersEraGroup[]>([]);
   const [activeTab, setActiveTab] = useState<PlayerTab>('overview');
@@ -333,6 +341,12 @@ export default function PlayerProfilePage() {
         if (rankingRes.ok) {
           const rankingData = await rankingRes.json();
           setRankingHistory(rankingData.results || []);
+          setRankingMeta({
+            rankStatus: rankingData.rankStatus ?? 'inactive',
+            currentRank: rankingData.currentRank ?? null,
+            lastRank: rankingData.lastRank ?? null,
+            lastRankDate: rankingData.lastRankDate ?? null,
+          });
         }
 
         const slamRes = await fetch(
@@ -433,14 +447,34 @@ export default function PlayerProfilePage() {
                     )}
                   </div>
 
-                  {rankingHistory.length > 0 && (
-                    <div className="player-current-rank">
-                      <span className="player-current-rank-num">#{rankingHistory[0].rank}</span>
-                      <span className="player-current-rank-label">Current ranking</span>
-                      {rankingHistory[0].points != null && (
-                        <span className="player-current-rank-points">
-                          {rankingHistory[0].points.toLocaleString()} pts
-                        </span>
+                  {rankingMeta && (
+                    <div
+                      className={`player-current-rank${
+                        rankingMeta.rankStatus === 'inactive' ? ' player-current-rank-inactive' : ''
+                      }`}
+                    >
+                      {rankingMeta.rankStatus === 'active' && rankingMeta.currentRank != null ? (
+                        <>
+                          <span className="player-current-rank-num">#{rankingMeta.currentRank}</span>
+                          <span className="player-current-rank-label">Current ranking</span>
+                          {rankingHistory[0]?.points != null && (
+                            <span className="player-current-rank-points">
+                              {rankingHistory[0].points.toLocaleString()} pts
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <span className="player-current-rank-num player-current-rank-inactive-label">
+                            Inactive
+                          </span>
+                          <span className="player-current-rank-label">Not in current rankings</span>
+                          {rankingMeta.lastRank != null && (
+                            <span className="player-current-rank-points">
+                              Last: #{rankingMeta.lastRank}
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                   )}

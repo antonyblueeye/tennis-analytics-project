@@ -10,22 +10,13 @@ from h2h_utils import (
     _float,
     _int,
 )
+from ranking_utils import get_player_ranking_status, matchup_rank
+from player_utils import calc_age_from_dob
 router = APIRouter(prefix="/api/h2h", tags=["h2h"])
 
 
-def _latest_rank(cur, player_id: str) -> int | None:
-    cur.execute(
-        """
-        SELECT ROUND(rank::numeric)::int AS rank
-        FROM atp_rankings
-        WHERE player::bigint = %s
-        ORDER BY ranking_date DESC
-        LIMIT 1
-        """,
-        (int(player_id),),
-    )
-    row = cur.fetchone()
-    return row["rank"] if row else None
+def _latest_rank(cur, player_id: str) -> dict:
+    return get_player_ranking_status(cur, player_id)
 
 
 MIN_SURFACE_MATCHES = 5
@@ -72,22 +63,9 @@ def _player_profile(cur, player_id: str) -> dict:
     if not row:
         raise HTTPException(status_code=404, detail=f"Player {player_id} not found")
     p = dict(row)
-    rank = _latest_rank(cur, player_id)
+    ranking = _latest_rank(cur, player_id)
     best_surface = _best_surface(cur, player_id)
-
-    cur.execute(
-        """
-        SELECT player_age FROM atp_player_matches
-        WHERE player_id = %s AND player_age ~ '^[0-9]'
-        ORDER BY match_date DESC NULLS LAST
-        LIMIT 1
-        """,
-        (player_id,),
-    )
-    age_row = cur.fetchone()
-    age = _float(age_row["player_age"]) if age_row else None
-    if age is not None:
-        age = round(age, 1)
+    age = calc_age_from_dob(p.get("dob"))
 
     return {
         "player_id": str(p["player_id"]),
@@ -96,10 +74,25 @@ def _player_profile(cur, player_id: str) -> dict:
         "hand": p.get("hand"),
         "height": _int(p.get("height")),
         "ioc": p.get("ioc"),
-        "rank": rank,
+        "rank": ranking["currentRank"],
+        "rankStatus": ranking["status"],
+        "lastRank": ranking["lastRank"],
+        "matchupRank": matchup_rank(ranking),
         "age": age,
         "bestSurface": best_surface,
         "handDisplay": format_hand(p.get("hand")),
+    }
+
+
+def _profile_response(p: dict) -> dict:
+    return {
+        "rank": p["rank"],
+        "rankStatus": p["rankStatus"],
+        "lastRank": p["lastRank"],
+        "age": p["age"],
+        "height": p["height"],
+        "hand": p["handDisplay"],
+        "bestSurface": p["bestSurface"] or "—",
     }
 
 
@@ -142,20 +135,8 @@ def get_head_to_head(
                         "summary": {"winsA": 0, "winsB": 0, "setsA": 0, "setsB": 0},
                         "meetings": [],
                         "profile": {
-                            "a": {
-                                "rank": profile_a["rank"],
-                                "age": profile_a["age"],
-                                "height": profile_a["height"],
-                                "hand": profile_a["handDisplay"],
-                                "bestSurface": profile_a["bestSurface"] or "—",
-                            },
-                            "b": {
-                                "rank": profile_b["rank"],
-                                "age": profile_b["age"],
-                                "height": profile_b["height"],
-                                "hand": profile_b["handDisplay"],
-                                "bestSurface": profile_b["bestSurface"] or "—",
-                            },
+                            "a": _profile_response(profile_a),
+                            "b": _profile_response(profile_b),
                         },
                         "bySurface": [],
                         "tourneyLevels": [],
@@ -168,20 +149,8 @@ def get_head_to_head(
 
                 data = aggregate_h2h(rows_a, [], name_a, name_b)
                 data["profile"] = {
-                    "a": {
-                        "rank": profile_a["rank"],
-                        "age": profile_a["age"],
-                        "height": profile_a["height"],
-                        "hand": profile_a["handDisplay"],
-                        "bestSurface": profile_a["bestSurface"] or "—",
-                    },
-                    "b": {
-                        "rank": profile_b["rank"],
-                        "age": profile_b["age"],
-                        "height": profile_b["height"],
-                        "hand": profile_b["handDisplay"],
-                        "bestSurface": profile_b["bestSurface"] or "—",
-                    },
+                    "a": _profile_response(profile_a),
+                    "b": _profile_response(profile_b),
                 }
                 data["matchup"] = build_matchup_context(cur, id_a, id_b, profile_a, profile_b)
                 return data

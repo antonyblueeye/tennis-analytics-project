@@ -26,6 +26,8 @@ const API = 'http://127.0.0.1:8000';
 type MatchupRow = { label: string; wins: number; losses: number; pct: number };
 type ProfileSide = {
   rank: number | null;
+  rankStatus?: 'active' | 'inactive';
+  lastRank?: number | null;
   age: number | null;
   height: number | null;
   hand: string;
@@ -80,8 +82,10 @@ function formatDate(iso: string) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function formatRank(rank: number | null) {
-  return rank != null ? `#${rank}` : '—';
+function formatRank(side: ProfileSide) {
+  if (side.rankStatus === 'active' && side.rank != null) return `#${side.rank}`;
+  if (side.rankStatus === 'inactive') return 'Inactive';
+  return side.rank != null ? `#${side.rank}` : '—';
 }
 
 function formatVal(val: number | null | string, suffix = '') {
@@ -359,7 +363,7 @@ export default function HeadToHeadStubs({ playerA, playerB }: Props) {
             <span className="h2h-profile-vs">vs</span>
             <span className="h2h-profile-name-b">{nameB}</span>
           </div>
-          <ProfileStat label="ATP rank" a={formatRank(profile.a.rank)} b={formatRank(profile.b.rank)} />
+          <ProfileStat label="ATP rank" a={formatRank(profile.a)} b={formatRank(profile.b)} />
           <ProfileStat label="Age" a={formatVal(profile.a.age)} b={formatVal(profile.b.age)} />
           <ProfileStat
             label="Height"

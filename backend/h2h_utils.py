@@ -2,6 +2,7 @@
 """Head-to-head aggregation from atp_player_matches."""
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
@@ -38,8 +39,12 @@ def _int(val: Any) -> int | None:
 def _float(val: Any) -> float | None:
     if val is None or val == "":
         return None
+    s = str(val).strip().lower()
+    if s in ("nan", "none", "null"):
+        return None
     try:
-        return float(str(val).strip())
+        x = float(s)
+        return x if math.isfinite(x) else None
     except (ValueError, TypeError):
         return None
 
@@ -330,7 +335,11 @@ def _avg_style(matches: list[dict]) -> list[dict]:
         {"label": "BP saved %", "a": bp, "b": b_bp, "max": 80, "pct": True},
         {"label": "DF / match", "a": df, "b": avg("opponent_df"), "max": 6, "invert": True},
     ]
-    return [i for i in items if i["a"] is not None or i["b"] is not None]
+    return [
+        i for i in items
+        if (i["a"] is not None and math.isfinite(i["a"]))
+        or (i["b"] is not None and math.isfinite(i["b"]))
+    ]
 
 
 def _radar_from_style(style: list[dict]) -> list[dict]:
@@ -489,8 +498,8 @@ def build_matchup_context(
     lo_b, hi_b, _ = height_bracket(ht_b)
     lo_a, hi_a, _ = height_bracket(ht_a)
 
-    rank_b = _int(profile_b.get("rank"))
-    rank_a = _int(profile_a.get("rank"))
+    rank_b = _int(profile_b.get("matchupRank") or profile_b.get("rank"))
+    rank_a = _int(profile_a.get("matchupRank") or profile_a.get("rank"))
     age_b = _float(profile_b.get("age"))
     age_a = _float(profile_a.get("age"))
 

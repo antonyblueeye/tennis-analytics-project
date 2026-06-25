@@ -887,6 +887,18 @@ a.player-item {
   text-align: center;
 }
 
+.player-current-rank-inactive {
+  background: linear-gradient(135deg, var(--surface-muted) 0%, var(--surface) 100%);
+  border-color: var(--border);
+}
+
+.player-current-rank-inactive-label {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0;
+}
+
 .player-current-rank-num {
   font-size: 28px;
   font-weight: 800;

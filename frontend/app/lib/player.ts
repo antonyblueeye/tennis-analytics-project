@@ -1,10 +1,11 @@
-/** Parses ATP dob format: 19320918 or 19320918.0 → Date */
+/** Parses ATP dob format: 19320918, 19320918.0 → Date */
 export function parseDob(dob: string | number | null | undefined): Date | null {
   if (dob == null || dob === '') return null;
 
-  const digits = String(dob).replace(/[^\d]/g, '');
-  if (digits.length < 8) return null;
+  const raw = String(dob).trim().split('.')[0];
+  if (raw.length < 8 || !/^\d{8}/.test(raw)) return null;
 
+  const digits = raw.slice(0, 8);
   const y = parseInt(digits.slice(0, 4), 10);
   const m = parseInt(digits.slice(4, 6), 10) - 1;
   const d = parseInt(digits.slice(6, 8), 10);

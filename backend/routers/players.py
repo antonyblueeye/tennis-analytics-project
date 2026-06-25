@@ -1,6 +1,7 @@
 # backend/routers/players.py
 from fastapi import APIRouter, Query, HTTPException
 from database import get_connection
+from ranking_utils import get_player_ranking_status
 from tournament_calendar import (
     normalize_masters_calendar,
     resolve_masters_result,
@@ -116,44 +117,40 @@ def get_player(player_id: int):
 
 @router.get("/{player_id}/latest-ranking")
 def get_latest_ranking(player_id: int):
-    """
-    Возвращает последний рейтинг игрока + имя/фамилию
-    """
-
-    sql = """
-        SELECT
-            p.player_id,
-            p.name_first,
-            p.name_last,
-
-            ROUND(r.rank::numeric)::int AS rank,
-            ROUND(r.points::numeric)::int AS points,
-
-            to_date(ROUND(r.ranking_date::numeric)::text, 'YYYYMMDD') AS ranking_date
-
-        FROM atp_rankings r
-        JOIN atp_players p
-            ON p.player_id::text = ROUND(r.player::numeric)::text
-
-        WHERE ROUND(r.player::numeric)::int = %s
-
-        ORDER BY r.ranking_date DESC
-        LIMIT 1;
-    """
-
+    """Current ranking if on latest snapshot; otherwise inactive + last known rank."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql, (player_id,))
-                row = cur.fetchone()
+                cur.execute(
+                    """
+                    SELECT player_id, name_first, name_last
+                    FROM atp_players WHERE player_id = %s
+                    """,
+                    (str(player_id),),
+                )
+                player = cur.fetchone()
+                if not player:
+                    raise HTTPException(status_code=404, detail="Игрок не найден")
 
-        if not row:
-            raise HTTPException(status_code=404, detail="Игрок не найден")
+                status = get_player_ranking_status(cur, player_id)
 
-        return dict(row)
+        if status["lastRank"] is None and status["currentRank"] is None:
+            raise HTTPException(status_code=404, detail="Рейтинг не найден")
 
+        return {
+            **dict(player),
+            "rank": status["currentRank"],
+            "points": status.get("currentPoints"),
+            "rankStatus": status["status"],
+            "lastRank": status["lastRank"],
+            "lastRankDate": status["lastRankDate"],
+            "latestSnapshotDate": status["latestSnapshotDate"],
+            "isActive": status["status"] == "active",
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}") from e
 
 @router.get("/rankings/top")
 def get_top_rankings(limit: int = 100):
@@ -228,10 +225,16 @@ def get_rankings_history(player_id: int):
             with conn.cursor() as cur:
                 cur.execute(sql, (player_id,))
                 rows = cur.fetchall()
+                status = get_player_ranking_status(cur, player_id)
 
         return {
             "player_id": player_id,
-            "results": [dict(r) for r in rows]
+            "rankStatus": status["status"],
+            "currentRank": status["currentRank"],
+            "lastRank": status["lastRank"],
+            "lastRankDate": status["lastRankDate"],
+            "latestSnapshotDate": status["latestSnapshotDate"],
+            "results": [dict(r) for r in rows],
         }
 
     except Exception as e:
