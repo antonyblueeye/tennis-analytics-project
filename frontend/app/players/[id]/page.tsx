@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import ReactCountryFlag from 'react-country-flag';
@@ -323,6 +323,17 @@ export default function PlayerProfilePage() {
   const [mastersGroups, setMastersGroups] = useState<MastersEraGroup[]>([]);
   const [mastersLoading, setMastersLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<PlayerTab>('overview');
+  const slamLoadedFor = useRef<number | null>(null);
+  const mastersLoadedFor = useRef<number | null>(null);
+
+  useEffect(() => {
+    slamLoadedFor.current = null;
+    mastersLoadedFor.current = null;
+    setGrandSlamData([]);
+    setMastersGroups([]);
+    setGrandSlamLoading(false);
+    setMastersLoading(false);
+  }, [playerId]);
 
   useEffect(() => {
     if (!playerId || Number.isNaN(playerId)) {
@@ -376,7 +387,7 @@ export default function PlayerProfilePage() {
   }, [playerId]);
 
   useEffect(() => {
-    if (activeTab !== 'grand-slam' || grandSlamData.length > 0 || grandSlamLoading) return;
+    if (activeTab !== 'grand-slam' || slamLoadedFor.current === playerId) return;
 
     const controller = new AbortController();
     setGrandSlamLoading(true);
@@ -387,22 +398,22 @@ export default function PlayerProfilePage() {
         return res.json();
       })
       .then((slamData) => {
-        if (!controller.signal.aborted) {
-          setGrandSlamData(slamData.results || []);
-        }
+        if (controller.signal.aborted) return;
+        setGrandSlamData(slamData.results || []);
+        slamLoadedFor.current = playerId;
       })
       .catch((err) => {
         if (err.name !== 'AbortError') console.error(err);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setGrandSlamLoading(false);
+        setGrandSlamLoading(false);
       });
 
     return () => controller.abort();
-  }, [activeTab, playerId, grandSlamData.length, grandSlamLoading]);
+  }, [activeTab, playerId]);
 
   useEffect(() => {
-    if (activeTab !== 'masters' || mastersGroups.length > 0 || mastersLoading) return;
+    if (activeTab !== 'masters' || mastersLoadedFor.current === playerId) return;
 
     const controller = new AbortController();
     setMastersLoading(true);
@@ -413,19 +424,19 @@ export default function PlayerProfilePage() {
         return res.json();
       })
       .then((mastersData) => {
-        if (!controller.signal.aborted) {
-          setMastersGroups(mastersData.groups || []);
-        }
+        if (controller.signal.aborted) return;
+        setMastersGroups(mastersData.groups || []);
+        mastersLoadedFor.current = playerId;
       })
       .catch((err) => {
         if (err.name !== 'AbortError') console.error(err);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setMastersLoading(false);
+        setMastersLoading(false);
       });
 
     return () => controller.abort();
-  }, [activeTab, playerId, mastersGroups.length, mastersLoading]);
+  }, [activeTab, playerId]);
 
   const slamRows = useMemo(() => buildSlamGrid(grandSlamData), [grandSlamData]);
   const slamStats = useMemo(() => computeSlamStats(grandSlamData), [grandSlamData]);
