@@ -27,7 +27,7 @@ export default function RootLayout({
         <div className="main-area">
           <main>{children}</main>
           <footer className="footer">
-            © 2025 Tennis Analytics · Data updated daily
+            © 2026 Tennis Analytics · Data updated daily
           </footer>
         </div>
       </body>

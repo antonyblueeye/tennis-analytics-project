@@ -13,6 +13,8 @@ async def lifespan(app: FastAPI):
         with get_connection() as conn:
             ensure_rankings_indexes(conn)
         hypotheses._load_early_success()
+        hypotheses._load_peak_age()
+        hypotheses._load_serve_saturation()
     except Exception:
         pass
     yield
