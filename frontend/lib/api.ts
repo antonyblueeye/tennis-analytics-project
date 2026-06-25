@@ -1,7 +1,9 @@
-/**
- * API base URL for fetch calls.
- * Vercel: set NEXT_PUBLIC_API_URL to your Railway FastAPI URL and redeploy.
- * Verify backend: GET {URL}/health → {"status":"ok"}
- */
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ?? 'http://127.0.0.1:8000';
+/** Railway/backend URL for client-side fetch (must include https:// on Vercel). */
+function normalizeApiBase(raw: string | undefined): string {
+  if (!raw?.trim()) return 'http://127.0.0.1:8000';
+  let url = raw.trim().replace(/\/$/, '');
+  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+  return url;
+}
+
+export const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);

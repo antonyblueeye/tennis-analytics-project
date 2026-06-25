@@ -29,7 +29,7 @@ Root Directory: `frontend`
 NEXT_PUBLIC_API_URL=https://YOUR-BACKEND.up.railway.app
 ```
 
-No trailing slash. Apply to Production + Preview. **Redeploy** after saving.
+Must start with `https://` (or `http://` for local). Without a protocol the build/runtime will fail or misroute requests.
 
 ## 3. Railway backend variables
 
