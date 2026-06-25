@@ -22,14 +22,16 @@ data_dir = os.path.normpath(data_dir)
 
 print(f"Ищу CSV файлы в: {data_dir}")
 
+# ATP main-draw singles only: atp_matches_1968.csv … atp_matches_2026.csv
+# Excludes doubles, qual/chall, futures, amateur (atp_matches_doubles_*, etc.)
 csv_files = sorted(
     glob.glob(
-        os.path.join(data_dir, "atp_matches_*.csv")
+        os.path.join(data_dir, "atp_matches_[0-9][0-9][0-9][0-9].csv")
     )
 )
 
 if not csv_files:
-    print("Ошибка: файлы atp_matches_*.csv не найдены")
+    print("Error: no atp_matches_YYYY.csv files found")
     sys.exit(1)
 
 print(f"Найдено файлов: {len(csv_files)}")

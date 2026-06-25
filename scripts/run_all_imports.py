@@ -2,6 +2,7 @@
 """Run all ATP import scripts in order (safe to re-run — tables are recreated)."""
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +22,12 @@ NOTES = {
 }
 
 
+def _env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    return env
+
+
 def main() -> int:
     scripts_dir = Path(__file__).resolve().parent
     python = sys.executable
@@ -37,7 +44,11 @@ def main() -> int:
             return 1
 
     # Connection test first
-    test = subprocess.run([python, str(scripts_dir / "test_connection.py")], cwd=scripts_dir)
+    test = subprocess.run(
+        [python, str(scripts_dir / "test_connection.py")],
+        cwd=scripts_dir,
+        env=_env(),
+    )
     if test.returncode != 0:
         print("\nFix backend/.env (DATABASE_URL from Railway Postgres Public URL) and retry.")
         return 1
@@ -48,7 +59,11 @@ def main() -> int:
         print(NOTES.get(name, ""))
         print("=" * 60)
 
-        result = subprocess.run([python, str(scripts_dir / name)], cwd=scripts_dir)
+        result = subprocess.run(
+            [python, str(scripts_dir / name)],
+            cwd=scripts_dir,
+            env=_env(),
+        )
         if result.returncode != 0:
             print(f"\nFailed at {name} (exit {result.returncode}). Fix the error and re-run.")
             print("Already-finished steps are OK; re-running run_all_imports.py is safe.")

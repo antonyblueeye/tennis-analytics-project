@@ -1,72 +1,72 @@
 # scripts/import_tennis_data.py
 
-import pandas as pd
 import os
 import sys
+
+import pandas as pd
+from psycopg2.extras import execute_values
 
 from db_config import connect
 
 TABLE_NAME = "atp_players"
 
-# 1. Определяем путь к CSV автоматически
-# Считаем, что CSV лежит в ../data/tennis_atp-master/atp_players.csv относительно скрипта
 script_dir = os.path.dirname(os.path.abspath(__file__))
-csv_path = os.path.join(script_dir, "..", "data", "tennis_atp-master", "atp_players.csv")
-csv_path = os.path.normpath(csv_path)  # приводит к нормальному виду для Windows
+csv_path = os.path.normpath(
+    os.path.join(script_dir, "..", "data", "tennis_atp-master", "atp_players.csv")
+)
 
-print(f"Ищу файл по пути: {csv_path}")
+print(f"CSV path: {csv_path}")
 
 if not os.path.exists(csv_path):
-    print(f"Ошибка: Файл не найден! Проверь путь: {csv_path}")
+    print(f"Error: file not found: {csv_path}")
     sys.exit(1)
 
-# 2. Инициализируем connection как None, чтобы в finally была определена
 connection = None
 
 try:
-    # 3. Загружаем CSV
-    dataframe = pd.read_csv(csv_path)
+    dataframe = pd.read_csv(csv_path, low_memory=False)
     dataframe = dataframe.where(pd.notnull(dataframe), None)
-    print(f"CSV загружен. Строк: {len(dataframe)}, столбцов: {len(dataframe.columns)}")
-    print(f"Первые 2 строки:\n{dataframe.head(2)}")
+    print(f"Loaded CSV: {len(dataframe)} rows, {len(dataframe.columns)} columns")
 
-    # 4. Подключаемся к БД
     connection = connect()
-    connection.autocommit = True
     cursor = connection.cursor()
-    print("Подключение к БД успешно")
+    print("Connected to database")
 
-    # Пересоздаём таблицу — повторный запуск не создаёт дубликаты
     cursor.execute(f"DROP TABLE IF EXISTS {TABLE_NAME} CASCADE")
-    print(f"Таблица {TABLE_NAME} удалена (если существовала)")
+    connection.commit()
+    print(f"Dropped {TABLE_NAME} (if existed)")
 
-    # 5. Создаём таблицу
-    columns = dataframe.columns
-    columns_with_types = ", ".join([f'"{col}" VARCHAR' for col in columns])
-    create_query = f'''
-    CREATE TABLE {TABLE_NAME} (
-        id SERIAL PRIMARY KEY,
-        {columns_with_types}
-    );
-    '''
-    cursor.execute(create_query)
-    print(f"Таблица {TABLE_NAME} готова")
+    columns = list(dataframe.columns)
+    columns_with_types = ", ".join(f'"{col}" VARCHAR' for col in columns)
+    cursor.execute(
+        f"""
+        CREATE TABLE {TABLE_NAME} (
+            id SERIAL PRIMARY KEY,
+            {columns_with_types}
+        )
+        """
+    )
+    connection.commit()
+    print(f"Created table {TABLE_NAME}")
 
-    # 6. Вставляем строки
-    for index, row in dataframe.iterrows():
-        insert_query = f'''
-            INSERT INTO {TABLE_NAME} ({', '.join([f'"{col}"' for col in columns])})
-            VALUES ({', '.join(['%s'] * len(columns))})
-        '''
-        cursor.execute(insert_query, tuple(row))
+    insert_query = f"""
+        INSERT INTO {TABLE_NAME} ({", ".join(f'"{col}"' for col in columns)})
+        VALUES %s
+    """
+    values = [tuple(row) for row in dataframe.to_numpy()]
+    execute_values(cursor, insert_query, values, page_size=2000)
+    connection.commit()
 
-    print(f"Готово! Вставлено строк: {len(dataframe)}")
+    print(f"Done: inserted {len(dataframe)} rows")
 
 except Exception as e:
-    print(f"Ошибка при выполнении: {e}")
+    print(f"Error: {e}")
+    if connection:
+        connection.rollback()
+    sys.exit(1)
 
 finally:
     if connection:
         cursor.close()
         connection.close()
-        print("Соединение закрыто")
+        print("Connection closed")
