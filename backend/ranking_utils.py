@@ -1,11 +1,21 @@
 # backend/ranking_utils.py
 """Current vs historical ATP ranking helpers."""
 
+_latest_snapshot_date: int | None = None
 
-def get_latest_snapshot_date(cur) -> int | None:
+
+def refresh_latest_snapshot_date(cur) -> int | None:
+    global _latest_snapshot_date
     cur.execute("SELECT MAX(ROUND(ranking_date::numeric)::bigint) AS d FROM atp_rankings")
     row = cur.fetchone()
-    return int(row["d"]) if row and row["d"] is not None else None
+    _latest_snapshot_date = int(row["d"]) if row and row["d"] is not None else None
+    return _latest_snapshot_date
+
+
+def get_latest_snapshot_date(cur) -> int | None:
+    if _latest_snapshot_date is not None:
+        return _latest_snapshot_date
+    return refresh_latest_snapshot_date(cur)
 
 
 def get_player_ranking_status(cur, player_id: str | int) -> dict:

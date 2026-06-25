@@ -11,6 +11,7 @@ from tournament_calendar import (
 
 from score_utils import player_perspective_score
 from player_overview import OVERVIEW_COLUMNS, build_player_overview
+from tournament_data_cache import get_global_slam_held, get_masters_calendar_rows
 
 router = APIRouter(prefix="/api/players", tags=["players"])
 
@@ -336,36 +337,12 @@ def get_grand_slam_results(player_id: int):
             "player_id": player_id,
             "results": _enrich_grand_slam_results(
                 [dict(r) for r in rows],
-                global_held=_fetch_global_slam_held(),
+                global_held=get_global_slam_held(),
             ),
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
-
-
-def _fetch_global_slam_held() -> set[tuple[int, str]]:
-    sql = """
-        SELECT DISTINCT
-            SPLIT_PART(tourney_id, '-', 1)::int AS year,
-            CASE SPLIT_PART(tourney_id, '-', 2)
-                WHEN '580' THEN 'ao'
-                WHEN '520' THEN 'rg'
-                WHEN '540' THEN 'w'
-                WHEN '560' THEN 'us'
-            END AS slam
-        FROM atp_player_matches
-        WHERE SPLIT_PART(tourney_id, '-', 2) IN ('580', '520', '540', '560')
-    """
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql)
-            rows = cur.fetchall()
-    return {
-        (int(r["year"]), r["slam"])
-        for r in rows
-        if r["slam"] is not None
-    }
 
 
 def _enrich_grand_slam_results(
@@ -501,19 +478,6 @@ def get_masters_results(player_id: int):
     с группировкой эпох, когда менялся состав Masters на туре.
     """
 
-    calendar_sql = """
-        SELECT
-            LEFT(match_date, 4)::int AS year,
-            tourney_name,
-            MIN(tourney_date::numeric) AS sort_key
-        FROM atp_player_matches
-        WHERE tourney_level = 'M'
-          AND match_date IS NOT NULL
-          AND LEFT(match_date, 4) ~ '^[0-9]{4}$'
-        GROUP BY 1, 2
-        ORDER BY 1, 3
-    """
-
     player_sql = """
         WITH masters_matches AS (
             SELECT
@@ -562,16 +526,14 @@ def get_masters_results(player_id: int):
     """
 
     try:
+        calendar_rows = get_masters_calendar_rows()
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(calendar_sql)
-                calendar_rows = cur.fetchall()
-
                 cur.execute(player_sql, (str(player_id),))
                 player_rows = cur.fetchall()
 
         groups = _build_masters_era_groups(
-            [dict(r) for r in calendar_rows],
+            calendar_rows,
             [dict(r) for r in player_rows],
         )
 

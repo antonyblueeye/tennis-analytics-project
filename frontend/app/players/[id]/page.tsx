@@ -319,7 +319,9 @@ export default function PlayerProfilePage() {
   const [rankingHistory, setRankingHistory] = useState<RankingHistory[]>([]);
   const [rankingMeta, setRankingMeta] = useState<RankingMeta | null>(null);
   const [grandSlamData, setGrandSlamData] = useState<GrandSlamResult[]>([]);
+  const [grandSlamLoading, setGrandSlamLoading] = useState(false);
   const [mastersGroups, setMastersGroups] = useState<MastersEraGroup[]>([]);
+  const [mastersLoading, setMastersLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<PlayerTab>('overview');
 
   useEffect(() => {
@@ -329,16 +331,21 @@ export default function PlayerProfilePage() {
       return;
     }
 
-    async function fetchPlayer() {
+    const controller = new AbortController();
+
+    async function fetchCoreProfile() {
       try {
-        const res = await fetch(`${API_BASE}/api/players/${playerId}`);
-        if (!res.ok) throw new Error('Player not found');
-        const data: Player = await res.json();
+        const [playerRes, rankingRes] = await Promise.all([
+          fetch(`${API_BASE}/api/players/${playerId}`, { signal: controller.signal }),
+          fetch(`${API_BASE}/api/players/${playerId}/rankings-history`, {
+            signal: controller.signal,
+          }),
+        ]);
+
+        if (!playerRes.ok) throw new Error('Player not found');
+        const data: Player = await playerRes.json();
         setPlayer(data);
 
-        const rankingRes = await fetch(
-          `${API_BASE}/api/players/${playerId}/rankings-history`
-        );
         if (rankingRes.ok) {
           const rankingData = await rankingRes.json();
           setRankingHistory(rankingData.results || []);
@@ -350,35 +357,75 @@ export default function PlayerProfilePage() {
           });
         }
 
-        const slamRes = await fetch(
-          `${API_BASE}/api/players/${playerId}/grand-slams`
-        );
-        if (slamRes.ok) {
-          const slamData = await slamRes.json();
-          setGrandSlamData(slamData.results || []);
-        }
-
-        const mastersRes = await fetch(
-          `${API_BASE}/api/players/${playerId}/masters`
-        );
-        if (mastersRes.ok) {
-          const mastersData = await mastersRes.json();
-          setMastersGroups(mastersData.groups || []);
-        }
-
         const fullName = `${data.name_first} ${data.name_last}`;
-        const img = await getPlayerImage(data.wikidata_id, fullName);
-        if (img) setImageUrl(img);
+        getPlayerImage(data.wikidata_id, fullName).then((img) => {
+          if (img && !controller.signal.aborted) setImageUrl(img);
+        });
       } catch (err) {
-        console.error(err);
-        setError(true);
+        if ((err as Error).name !== 'AbortError') {
+          console.error(err);
+          setError(true);
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
 
-    fetchPlayer();
+    fetchCoreProfile();
+    return () => controller.abort();
   }, [playerId]);
+
+  useEffect(() => {
+    if (activeTab !== 'grand-slam' || grandSlamData.length > 0 || grandSlamLoading) return;
+
+    const controller = new AbortController();
+    setGrandSlamLoading(true);
+
+    fetch(`${API_BASE}/api/players/${playerId}/grand-slams`, { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Failed to load Grand Slam results');
+        return res.json();
+      })
+      .then((slamData) => {
+        if (!controller.signal.aborted) {
+          setGrandSlamData(slamData.results || []);
+        }
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') console.error(err);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setGrandSlamLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [activeTab, playerId, grandSlamData.length, grandSlamLoading]);
+
+  useEffect(() => {
+    if (activeTab !== 'masters' || mastersGroups.length > 0 || mastersLoading) return;
+
+    const controller = new AbortController();
+    setMastersLoading(true);
+
+    fetch(`${API_BASE}/api/players/${playerId}/masters`, { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Failed to load Masters results');
+        return res.json();
+      })
+      .then((mastersData) => {
+        if (!controller.signal.aborted) {
+          setMastersGroups(mastersData.groups || []);
+        }
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') console.error(err);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setMastersLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [activeTab, playerId, mastersGroups.length, mastersLoading]);
 
   const slamRows = useMemo(() => buildSlamGrid(grandSlamData), [grandSlamData]);
   const slamStats = useMemo(() => computeSlamStats(grandSlamData), [grandSlamData]);
@@ -544,7 +591,12 @@ export default function PlayerProfilePage() {
                   <h3 className="analytics-title">Grand Slam Results</h3>
                   <ResultsLegend />
 
-                  {slamRows.length === 0 ? (
+                  {grandSlamLoading ? (
+                    <div className="loading-wrap" style={{ padding: '32px 16px' }}>
+                      <div className="spinner" />
+                      <span>Loading Grand Slam results…</span>
+                    </div>
+                  ) : slamRows.length === 0 ? (
                     <div className="empty-state" style={{ padding: '32px 16px' }}>
                       <p className="empty-sub">No Grand Slam results found</p>
                     </div>
@@ -638,7 +690,12 @@ export default function PlayerProfilePage() {
                   <h3 className="analytics-title">ATP Masters 1000 Results</h3>
                   <ResultsLegend />
 
-                  {mastersGroups.length === 0 ? (
+                  {mastersLoading ? (
+                    <div className="loading-wrap" style={{ padding: '32px 16px' }}>
+                      <div className="spinner" />
+                      <span>Loading Masters results…</span>
+                    </div>
+                  ) : mastersGroups.length === 0 ? (
                     <div className="empty-state" style={{ padding: '32px 16px' }}>
                       <p className="empty-sub">No Masters 1000 results found</p>
                     </div>

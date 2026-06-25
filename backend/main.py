@@ -4,21 +4,29 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from routers import players, matches, dashboard, h2h, hypotheses
-from database import get_connection
-from db_indexes import ensure_rankings_indexes
+from database import get_connection, init_db_pool, close_db_pool
+from db_indexes import ensure_indexes
+from tournament_data_cache import load_tournament_caches
+from ranking_utils import refresh_latest_snapshot_date
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
+        init_db_pool()
         with get_connection() as conn:
-            ensure_rankings_indexes(conn)
+            ensure_indexes(conn)
+        load_tournament_caches()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                refresh_latest_snapshot_date(cur)
         hypotheses._load_early_success()
         hypotheses._load_peak_age()
         hypotheses._load_serve_saturation()
     except Exception:
         pass
     yield
+    close_db_pool()
 
 
 app = FastAPI(
