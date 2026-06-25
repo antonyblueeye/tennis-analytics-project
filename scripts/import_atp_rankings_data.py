@@ -113,6 +113,18 @@ try:
     print("Импорт завершен успешно")
     print(f"Всего загружено строк: {total_rows}")
 
+    cursor.execute("""
+        DELETE FROM atp_rankings a
+        USING atp_rankings b
+        WHERE a.id > b.id
+          AND ROUND(a.player::numeric) = ROUND(b.player::numeric)
+          AND ROUND(a.ranking_date::numeric) = ROUND(b.ranking_date::numeric)
+    """)
+    removed = cursor.rowcount
+    connection.commit()
+    if removed:
+        print(f"Удалено дубликатов: {removed}")
+
 except Exception as e:
     print(f"\nОшибка при выполнении: {e}")
 

@@ -37,7 +37,10 @@ def _insight(icon: str, label: str, value: str, sub: str | None = None) -> dict:
 
 
 def get_highlights(from_date: date, to_date: date) -> list[dict]:
+    from_yyyymmdd = int(from_date.strftime("%Y%m%d"))
+    to_yyyymmdd = int(to_date.strftime("%Y%m%d"))
     params = [from_date, to_date]
+    rank_params = [from_yyyymmdd, to_yyyymmdd]
     items: list[dict] = []
 
     streak_sql = f"""
@@ -118,13 +121,20 @@ def get_highlights(from_date: date, to_date: date) -> list[dict]:
 
     ranking_change_sql = """
         WITH in_range AS (
-            SELECT
-                player::bigint AS player_id,
-                rank AS rank_val,
+            SELECT DISTINCT ON (
+                ROUND(player::numeric)::bigint,
+                ROUND(ranking_date::numeric)::bigint
+            )
+                ROUND(player::numeric)::bigint AS player_id,
+                ROUND(rank::numeric)::int AS rank_val,
                 ROUND(ranking_date::numeric)::bigint AS rd
             FROM atp_rankings
-            WHERE TO_DATE(ranking_date::text, 'YYYYMMDD') >= %s
-              AND TO_DATE(ranking_date::text, 'YYYYMMDD') <= %s
+            WHERE ROUND(ranking_date::numeric)::bigint >= %s
+              AND ROUND(ranking_date::numeric)::bigint <= %s
+            ORDER BY
+                ROUND(player::numeric)::bigint,
+                ROUND(ranking_date::numeric)::bigint,
+                id ASC
         ),
         bounds AS (
             SELECT
@@ -151,7 +161,7 @@ def get_highlights(from_date: date, to_date: date) -> list[dict]:
             c.last_rank,
             p.name_first || ' ' || p.name_last AS player_name
         FROM changes c
-        JOIN atp_players p ON p.player_id::bigint = c.player_id
+        JOIN atp_players p ON p.player_id::text = c.player_id::text
         ORDER BY c.rank_change {direction}
         LIMIT 1
     """
@@ -211,7 +221,7 @@ def get_highlights(from_date: date, to_date: date) -> list[dict]:
                     f"{n} nations across all tournament fields",
                 ))
 
-            jump = _fetch_one(cur, ranking_change_sql.format(direction="ASC"), params)
+            jump = _fetch_one(cur, ranking_change_sql.format(direction="ASC"), rank_params)
             if jump and jump["rank_change"] < 0:
                 places = -int(jump["rank_change"])
                 items.append(_insight(
@@ -221,7 +231,7 @@ def get_highlights(from_date: date, to_date: date) -> list[dict]:
                     f"+{places} places · #{jump['first_rank']} → #{jump['last_rank']}",
                 ))
 
-            drop = _fetch_one(cur, ranking_change_sql.format(direction="DESC"), params)
+            drop = _fetch_one(cur, ranking_change_sql.format(direction="DESC"), rank_params)
             if drop and drop["rank_change"] > 0:
                 places = int(drop["rank_change"])
                 items.append(_insight(

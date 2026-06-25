@@ -161,27 +161,27 @@ def get_top_rankings(limit: int = 100):
 
     sql = """
         WITH latest_date AS (
-            SELECT MAX(ranking_date) AS max_date
+            SELECT MAX(ROUND(ranking_date::numeric)::bigint) AS max_date
             FROM atp_rankings
+        ),
+        deduped AS (
+            SELECT DISTINCT ON (ROUND(r.player::numeric)::bigint)
+                p.player_id,
+                p.name_first,
+                p.name_last,
+                p.wikidata_id,
+                ROUND(r.rank::numeric)::int AS rank,
+                ROUND(r.points::numeric)::int AS points,
+                to_date(ROUND(r.ranking_date::numeric)::text, 'YYYYMMDD') AS ranking_date
+            FROM atp_rankings r
+            JOIN atp_players p
+                ON p.player_id::text = ROUND(r.player::numeric)::text
+            JOIN latest_date ld
+                ON ROUND(r.ranking_date::numeric)::bigint = ld.max_date
+            ORDER BY ROUND(r.player::numeric)::bigint, r.id ASC
         )
-        SELECT
-            p.player_id,
-            p.name_first,
-            p.name_last,
-            p.wikidata_id,
-
-            ROUND(r.rank::numeric)::int AS rank,
-            ROUND(r.points::numeric)::int AS points,
-
-            to_date(ROUND(r.ranking_date::numeric)::text, 'YYYYMMDD') AS ranking_date
-
-        FROM atp_rankings r
-        JOIN atp_players p
-            ON p.player_id::text = ROUND(r.player::numeric)::text
-
-        JOIN latest_date ld
-            ON r.ranking_date = ld.max_date
-
+        SELECT *
+        FROM deduped
         ORDER BY rank ASC
         LIMIT %s;
     """
@@ -205,20 +205,16 @@ def get_rankings_history(player_id: int):
     """
 
     sql = """
-        SELECT
+        SELECT DISTINCT ON (ROUND(ranking_date::numeric)::bigint)
             to_date(
                 ROUND(ranking_date::numeric)::text,
                 'YYYYMMDD'
             ) AS ranking_date,
-
             ROUND(rank::numeric)::int AS rank,
             ROUND(points::numeric)::int AS points
-
         FROM atp_rankings
-
-        WHERE ROUND(player::numeric)::int = %s
-
-        ORDER BY ranking_date DESC
+        WHERE ROUND(player::numeric)::bigint = %s
+        ORDER BY ROUND(ranking_date::numeric)::bigint DESC, id ASC
     """
 
     try:
